@@ -8,15 +8,26 @@ SHEET_ID = "1LNaFoDOAr08LGxQ8cCRSSff7U7OU5ABH"
 # 如果你的工作表名稱是中文，請填在這裡，如果是預設的第一個分頁則可省略
 SHEET_NAME = "Sheet1" 
 
-# 使用 quote 安全處理中文字符
+# 使用 quote 安全處理中文字符，避免 ASCII 編碼錯誤
 encoded_sheet_name = urllib.parse.quote(SHEET_NAME)
 SHEET_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={encoded_sheet_name}"
 
 # --- 2. 修改讀取函數 ---
 @st.cache_data(ttl=300)
 def load_data():
-    # 改用 read_csv 並指定編碼為 utf-8
+    # 改用 read_csv 並強制指定 utf-8 編碼
     return pd.read_csv(SHEET_URL, encoding='utf-8')
+
+# --- 3. 後續處理 (修正小問題) ---
+try:
+    df_raw = load_data()
+    # 這裡加入一個保護機制：如果讀入的欄位有空格，自動修掉
+    df_raw.columns = df_raw.columns.str.strip()
+    st.sidebar.success("✅ 資料已同步 Google Sheets")
+except Exception as e:
+    st.error(f"❌ 無法讀取 Google 試算表。錯誤資訊: {e}")
+    st.stop()
+    
 # 網頁基本設定
 st.set_page_config(page_title="ALÉ 專業報價系統", layout="wide")
 
