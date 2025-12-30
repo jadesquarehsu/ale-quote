@@ -75,34 +75,35 @@ if sel_cate != "全部": df = df[df['Category'] == sel_cate]
 if search_kw: df = df[df['Description_CH'].str.contains(search_kw, na=False, case=False)]
 
 # --- 4. 主畫面顯示 ---
+# --- 4. 主畫面佈局與購物車 ---
 st.title("🛡️ ALÉ 代理商專業報價系統")
 
-# 初始化購物車狀態
+# 初始化購物車（如果還沒建立過）
 if 'cart' not in st.session_state:
     st.session_state.cart = []
 
-# 建立左右兩欄佈局
+# 建立左右兩欄：左邊產品列表，右邊報價清單
 col_main, col_cart = st.columns([2, 1])
 
 with col_main:
-    st.subheader(f"📦 產品列表 ({len(df)} 筆)")
+    st.subheader(f"📦 產品搜尋結果 ({len(df)} 筆)")
     if df.empty:
-        st.info("查無符合條件的產品。")
+        st.info("查無符合條件的產品，請調整左側篩選條件。")
     else:
-        # 使用收折框顯示每一項產品，避免頁面太長
+        # 使用迴圈產生每一列產品，並附上加入按鈕
         for _, row in df.head(50).iterrows():
-            # 顯示貨號、品名與第一個階層的價格作為預覽
-            with st.expander(f"➕ {row['Item_No']} - {row['Description_CH']} (10-15pcs: ${row['10-15PCS']:,})"):
-                st.write(f"**性別：** {row['Gender']} | **備註：** {row['NOTE']}") [cite: 1]
+            # 建立摺疊區塊方便瀏覽
+            with st.expander(f"➕ {row['Item_No']} - {row['Description_CH']}"):
+                st.write(f"**性別：** {row['Gender']} | **備註：** {row['NOTE']}")
                 
-                # 顯示三種階層報價
-                p1, p2, p3 = st.columns(3)
-                p1.metric("10-15pcs", f"${row['10-15PCS']:,}")
-                p2.metric("16-29pcs", f"${row['16-29PCS']:,}")
-                p3.metric("30-59pcs", f"${row['30-59PCS']:,}")
+                # 顯示三個關鍵階層的報價
+                m_col1, m_col2, m_col3 = st.columns(3)
+                m_col1.metric("10-15pcs", f"${row['10-15PCS']:,}")
+                m_col2.metric("16-29pcs", f"${row['16-29PCS']:,}")
+                m_col3.metric("30-59pcs", f"${row['30-59PCS']:,}")
                 
-                # 加入按鈕
-                if st.button("加入報價清單", key=f"add_{row['Item_No']}"):
+                # 獨立的加入按鈕，點擊後會存入 session_state.cart
+                if st.button("加入報價單", key=f"btn_{row['Item_No']}"):
                     st.session_state.cart.append(row.to_dict())
                     st.toast(f"✅ {row['Item_No']} 已加入")
 
@@ -110,11 +111,12 @@ with col_cart:
     st.subheader("🛒 報價清單預覽")
     if st.session_state.cart:
         cart_df = pd.DataFrame(st.session_state.cart)
-        # 顯示清單表格，僅列出關鍵欄位
-        st.dataframe(cart_df[['Item_No', 'Description_CH', '10-15PCS', '16-29PCS', '30-59PCS']])
+        # 只顯示關鍵欄位讓清單簡潔
+        st.dataframe(cart_df[['Item_No', '10-15PCS', '16-29PCS', '30-59PCS']], use_container_width=True)
         
+        # 提供清空按鈕
         if st.button("🗑️ 清空清單"):
             st.session_state.cart = []
             st.rerun()
     else:
-        st.info("尚未選取任何產品。")
+        st.info("尚未選取產品，請從左側列表點擊「加入報價單」。")
