@@ -1,40 +1,27 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import urllib.parse  # <--- 加入這一行
+import urllib.parse
 
-# --- 1. 設定 Google Sheet ID ---
+# --- 1. 這行必須放在所有 st 指令的最前面 ---
+st.set_page_config(page_title="ALÉ 專業報價系統", layout="wide")
+
+# --- 2. 設定 Google Sheet ID ---
 SHEET_ID = "1LNaFoDOAr08LGxQ8cCRSSff7U7OU5ABH" 
-# 如果你的工作表名稱是中文，請填在這裡，如果是預設的第一個分頁則可省略
 SHEET_NAME = "Sheet1" 
 
-# 使用 quote 安全處理中文字符，避免 ASCII 編碼錯誤
+# 安全處理網址
 encoded_sheet_name = urllib.parse.quote(SHEET_NAME)
 SHEET_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={encoded_sheet_name}"
 
-# --- 2. 修改讀取函數 ---
+# --- 3. 讀取與計算邏輯 ---
 @st.cache_data(ttl=300)
 def load_data():
-    # 改用 read_csv 並強制指定 utf-8 編碼
     return pd.read_csv(SHEET_URL, encoding='utf-8')
-
-# --- 3. 後續處理 (修正小問題) ---
-try:
-    df_raw = load_data()
-    # 這裡加入一個保護機制：如果讀入的欄位有空格，自動修掉
-    df_raw.columns = df_raw.columns.str.strip()
-    st.sidebar.success("✅ 資料已同步 Google Sheets")
-except Exception as e:
-    st.error(f"❌ 無法讀取 Google 試算表。錯誤資訊: {e}")
-    st.stop()
-    
-# 網頁基本設定
-st.set_page_config(page_title="ALÉ 專業報價系統", layout="wide")
 
 # 運費代碼換算
 FREIGHT_MAP = {'A': 45, 'B': 63, 'C': 103, 'D': 13, 'E': 22}
 
-# 核心計算邏輯
 def calc_price(row, src_col, design, service, margin, rate):
     try:
         p_price = float(row[src_col])
@@ -46,17 +33,16 @@ def calc_price(row, src_col, design, service, margin, rate):
         return round((cost + design + service) / (1 - margin))
     except: return np.nan
 
-# 讀取資料並加上快取
-# 同時，請將讀取資料的那一行 load_data 也要從 pd.read_excel 改成 pd.read_csv
-@st.cache_data(ttl=300)
-def load_data():
-    return pd.read_csv(SHEET_URL)
+# --- 4. 執行與介面 ---
 try:
     df_raw = load_data()
+    df_raw.columns = df_raw.columns.str.strip()
+    # 這裡才能開始使用其他 st 指令，例如 sidebar
     st.sidebar.success("✅ 資料已同步 Google Sheets")
 except Exception as e:
-    st.error(f"❌ 無法讀取 Google 試算表，請確認 ID 正確且已開啟「知道連結的任何人皆可檢視」。錯誤資訊: {e}")
+    st.error(f"❌ 讀取失敗。請確認試算表已開啟「知道連結的任何人皆可檢視」。")
     st.stop()
+
 
 # --- 2. 介面設定 ---
 st.sidebar.header("⚙️ 報價參數設定")
