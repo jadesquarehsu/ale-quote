@@ -6,7 +6,8 @@ import os
 # --- 1. 設定 Google Sheet ID ---
 # 請將這裡換成您 Google 試算表網址中的那串 ID
 SHEET_ID = "1LNaFoDOAr08LGxQ8cCRSSff7U7OU5ABH" 
-SHEET_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=xlsx"
+SHEET_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv"
+
 
 # 網頁基本設定
 st.set_page_config(page_title="ALÉ 專業報價系統", layout="wide")
@@ -27,10 +28,10 @@ def calc_price(row, src_col, design, service, margin, rate):
     except: return np.nan
 
 # 讀取資料並加上快取
-@st.cache_data(ttl=300) # 每 5 分鐘自動刷新一次
+# 同時，請將讀取資料的那一行 load_data 也要從 pd.read_excel 改成 pd.read_csv
+@st.cache_data(ttl=300)
 def load_data():
-    return pd.read_excel(SHEET_URL)
-
+    return pd.read_csv(SHEET_URL)
 try:
     df_raw = load_data()
     st.sidebar.success("✅ 資料已同步 Google Sheets")
