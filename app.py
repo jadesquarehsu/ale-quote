@@ -1,38 +1,32 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import urllib.parse
 
-# --- 1. [絕對核心] 設定必須放第一行 ---
+# --- 1. 網頁基本設定 (必須放第一行) ---
 st.set_page_config(page_title="ALÉ 專業報價系統", layout="wide")
 
 # ==========================================
-# 🔐 安全登入檢查 (新增區塊)
+# 🔐 暴力密碼鎖 (最簡單有效的版本)
 # ==========================================
-# 請在這裡設定您的密碼
-LOGIN_PASSWORD = "8017"
+# 設定您的密碼
+PASSWORD = "888888"
 
-if 'logged_in' not in st.session_state:
-    st.session_state.logged_in = False
+# 建立一個側邊欄輸入框
+input_pass = st.sidebar.text_input("🔒 請輸入通關密碼以解鎖", type="password")
 
-def check_password():
-    if st.session_state.password_input == LOGIN_PASSWORD:
-        st.session_state.logged_in = True
-    else:
-        st.error("❌ 密碼錯誤，請重新輸入")
-
-if not st.session_state.logged_in:
-    st.markdown("## 🔒 系統鎖定中")
-    st.text_input("請輸入內部存取密碼：", type="password", key="password_input", on_change=check_password)
-    st.stop()  # 密碼不對就停止執行下面的程式，什麼都看不到
+# 如果密碼不對，就顯示警告並「直接停止」程式往下跑
+if input_pass != PASSWORD:
+    st.sidebar.warning("❌ 密碼錯誤或未輸入")
+    st.title("🔒 系統已鎖定")
+    st.info("本系統包含商業機密，請輸入密碼後按 Enter 進入。")
+    st.stop()  # <--- 關鍵！這裡會強制停止，後面的程式碼完全不會被執行
 
 # ==========================================
-# 🔓 登入成功後才會執行以下內容
+# 🔓 只有密碼正確，才會執行到這裡
 # ==========================================
 
 # --- 2. Google Sheet 設定 ---
-# 請確認 ID 是否正確
-SHEET_ID = "1gS_uG7FLrYl94y_--X8rO-WB910d65bSjB-H_V8o4b0" 
+SHEET_ID = "1LNaFoDOAr08LGxQ8cCRSSff7U7OU5ABH" 
 SHEET_NAME = "Sheet1" 
 
 try:
@@ -41,11 +35,12 @@ try:
 except:
     SHEET_URL = ""
 
-# --- 3. 讀取與計算 ---
+# --- 3. 讀取資料 ---
 @st.cache_data(ttl=300)
 def load_data():
     return pd.read_csv(SHEET_URL, encoding='utf-8')
 
+# 運費與計算邏輯
 FREIGHT_MAP = {'A': 45, 'B': 63, 'C': 103, 'D': 13, 'E': 22}
 
 def calc_price(row, src_col, design, service, margin, rate):
@@ -63,34 +58,35 @@ try:
     df_raw = load_data()
     df_raw.columns = df_raw.columns.str.strip()
 except Exception as e:
-    st.error("❌ 無法讀取資料，請檢查 Google Sheet 權限。")
+    st.error("無法讀取資料")
     st.stop()
 
-# --- 4. 側邊欄設定 ---
-st.sidebar.success("🔓 已登入")
-st.sidebar.header("⚙️ 報價參數設定")
-rate = st.sidebar.number_input("當前匯率", value=35.0, step=0.1)
+# --- 4. 側邊欄設定 (利潤率隱藏版) ---
+st.sidebar.success("✅ 驗證通過")
+st.sidebar.header("⚙️ 報價設定")
+rate = st.sidebar.number_input("匯率", value=35.0, step=0.1)
+
+# 把利潤率藏在折疊選單裡
+with st.sidebar.expander("📈 進階利潤設定"):
+    m1 = st.slider("10-15pcs", 10, 60, 40) / 100
+    m2 = st.slider("16-29pcs", 10, 60, 35) / 100
+    m3 = st.slider("30-59pcs", 10, 60, 30) / 100
 
 st.sidebar.markdown("---")
-# 這裡稍微隱藏一下利潤率，把它收進一個折疊選單裡，避免太顯眼
-with st.sidebar.expander("📈 進階利潤設定 (點擊展開)"):
-    m1 = st.slider("10-15pcs 利潤", 10, 60, 40) / 100
-    m2 = st.slider("16-29pcs 利潤", 10, 60, 35) / 100
-    m3 = st.slider("30-59pcs 利潤", 10, 60, 30) / 100
-
-st.sidebar.markdown("---")
+# 篩選選單
 line_opt = ["全部"] + sorted(df_raw['Line_code'].dropna().unique().tolist())
 cate_opt = ["全部"] + sorted(df_raw['Category'].dropna().unique().tolist())
 sel_line = st.sidebar.selectbox("系列", line_opt)
 sel_cate = st.sidebar.selectbox("類型", cate_opt)
-search_kw = st.sidebar.text_input("搜尋關鍵字 (貨號/品名)")
+search_kw = st.sidebar.text_input("搜尋關鍵字")
 
-# 計算與篩選
+# --- 5. 計算核心 ---
 df = df_raw.copy()
 df['10-15PCS'] = df.apply(lambda r: calc_price(r, '10-59', 300, 100, m1, rate), axis=1)
 df['16-29PCS'] = df.apply(lambda r: calc_price(r, '10-59', 200, 62, m2, rate), axis=1)
 df['30-59PCS'] = df.apply(lambda r: calc_price(r, '10-59', 150, 33, m3, rate), axis=1)
 
+# 過濾
 if sel_line != "全部": df = df[df['Line_code'] == sel_line]
 if sel_cate != "全部": df = df[df['Category'] == sel_cate]
 if search_kw: 
@@ -99,18 +95,19 @@ if search_kw:
         df['Item_No'].astype(str).str.contains(search_kw, na=False)
     ]
 
-# --- 5. 主畫面與購物車 ---
+# --- 6. 顯示主畫面 ---
 st.title("🛡️ ALÉ 代理商專業報價系統")
 
+# 初始化購物車
 if 'cart' not in st.session_state:
     st.session_state.cart = []
 
 col_main, col_cart = st.columns([2, 1])
 
 with col_main:
-    st.subheader(f"📦 產品搜尋結果 ({len(df)} 筆)")
+    st.subheader(f"📦 搜尋結果 ({len(df)} 筆)")
     if df.empty:
-        st.info("查無符合條件的產品。")
+        st.info("查無產品")
     else:
         for _, row in df.head(50).iterrows():
             with st.expander(f"➕ {row['Item_No']} - {row['Description_CH']}"):
@@ -119,10 +116,9 @@ with col_main:
                 c1.metric("10-15pcs", f"${row['10-15PCS']:,}")
                 c2.metric("16-29pcs", f"${row['16-29PCS']:,}")
                 c3.metric("30-59pcs", f"${row['30-59PCS']:,}")
-                
                 if st.button("加入報價單", key=f"add_{row['Item_No']}"):
                     st.session_state.cart.append(row.to_dict())
-                    st.toast(f"✅ 已加入 {row['Item_No']}")
+                    st.toast(f"✅ {row['Item_No']} 已加入")
 
 with col_cart:
     st.subheader("🛒 報價清單")
@@ -133,4 +129,4 @@ with col_cart:
             st.session_state.cart = []
             st.rerun()
     else:
-        st.info("尚未選取產品")
+        st.info("尚未選取")
