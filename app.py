@@ -5,7 +5,7 @@ import os
 
 # --- 1. 設定 Google Sheet ID ---
 # 請將這裡換成您 Google 試算表網址中的那串 ID
-SHEET_ID = "您的試算表ID貼在這裡" 
+SHEET_ID = "1LNaFoDOAr08LGxQ8cCRSSff7U7OU5ABH" 
 SHEET_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=xlsx"
 
 # 網頁基本設定
