@@ -1,14 +1,22 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import os
+import urllib.parse  # <--- 加入這一行
 
 # --- 1. 設定 Google Sheet ID ---
-# 請將這裡換成您 Google 試算表網址中的那串 ID
 SHEET_ID = "1LNaFoDOAr08LGxQ8cCRSSff7U7OU5ABH" 
-SHEET_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv"
+# 如果你的工作表名稱是中文，請填在這裡，如果是預設的第一個分頁則可省略
+SHEET_NAME = "Sheet1" 
 
+# 使用 quote 安全處理中文字符
+encoded_sheet_name = urllib.parse.quote(SHEET_NAME)
+SHEET_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={encoded_sheet_name}"
 
+# --- 2. 修改讀取函數 ---
+@st.cache_data(ttl=300)
+def load_data():
+    # 改用 read_csv 並指定編碼為 utf-8
+    return pd.read_csv(SHEET_URL, encoding='utf-8')
 # 網頁基本設定
 st.set_page_config(page_title="ALÉ 專業報價系統", layout="wide")
 
