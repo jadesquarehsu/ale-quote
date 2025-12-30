@@ -9,7 +9,7 @@ st.set_page_config(page_title="ALÉ 專業報價系統", layout="wide")
 # 🔐 暴力密碼鎖 (最簡單有效的版本)
 # ==========================================
 # 設定您的密碼
-PASSWORD = "888888"
+PASSWORD = "8017"
 
 # 建立一個側邊欄輸入框
 input_pass = st.sidebar.text_input("🔒 請輸入通關密碼以解鎖", type="password")
@@ -26,7 +26,7 @@ if input_pass != PASSWORD:
 # ==========================================
 
 # --- 2. Google Sheet 設定 ---
-SHEET_ID = "1LNaFoDOAr08LGxQ8cCRSSff7U7OU5ABH" 
+SHEET_ID = "1gS_uG7FLrYl94y_--X8rO-WB910d65bSjB-H_V8o4b0" 
 SHEET_NAME = "Sheet1" 
 
 try:
