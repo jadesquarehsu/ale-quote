@@ -26,7 +26,7 @@ if input_pass != PASSWORD:
 # ==========================================
 
 # --- 2. Google Sheet 設定 ---
-SHEET_ID = "1gS_uG7FLrYl94y_--X8rO-WB910d65bSjB-H_V8o4b0" 
+SHEET_ID = "1LNaFoDOAr08LGxQ8cCRSSff7U7OU5ABH" 
 SHEET_NAME = "Sheet1" 
 
 try:
