@@ -10,7 +10,7 @@ st.set_page_config(page_title="ALÉ 專業報價系統", layout="wide")
 # 🔐 安全密碼鎖
 # ==========================================
 # 設定您的密碼
-PASSWORD = "888888"
+PASSWORD = "8017"
 
 # 側邊欄輸入框
 input_pass = st.sidebar.text_input("🔒 請輸入通關密碼", type="password")
