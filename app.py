@@ -17,7 +17,6 @@ input_pass = st.sidebar.text_input("🔒 請輸入通關密碼", type="password"
 if input_pass != PASSWORD:
     st.sidebar.warning("❌ 未輸入或密碼錯誤")
     st.markdown("## 🔒 系統已鎖定")
-    st.info("⚠️ 請在左側輸入密碼以存取報價系統。")
     st.stop() 
 
 # ==========================================
@@ -38,7 +37,12 @@ except:
 @st.cache_data(ttl=300)
 def load_data():
     try:
-        return pd.read_csv(SHEET_URL, encoding='utf-8')
+        # 讀取 CSV
+        df = pd.read_csv(SHEET_URL, encoding='utf-8')
+        # [關鍵修正] 強制把 Item_No 轉成字串，並去除前後空白，避免對不到圖
+        if 'Item_No' in df.columns:
+            df['Item_No'] = df['Item_No'].astype(str).str.strip()
+        return df
     except:
         return None
 
@@ -60,6 +64,13 @@ def calc_price(row, src_col, design, service, margin, rate):
     except:
         return np.nan
 
+# --- 5. [新增] 加入購物車的專用函數 (CallBack) ---
+# 這是讓按鈕絕對有效的關鍵
+def add_to_cart_callback(item_dict):
+    st.session_state.cart.append(item_dict)
+    st.toast(f"✅ 已加入 {item_dict['Item_No']}")
+
+# 載入資料
 df_raw = load_data()
 
 if df_raw is None:
@@ -68,7 +79,7 @@ if df_raw is None:
 
 df_raw.columns = df_raw.columns.str.strip()
 
-# --- 5. 參數設定面板 ---
+# --- 6. 參數設定面板 ---
 st.sidebar.success("✅ 已解鎖")
 st.sidebar.markdown("---")
 st.sidebar.header("⚙️ 參數設定")
@@ -89,7 +100,7 @@ sel_cate = st.sidebar.selectbox("類型篩選", cate_opt)
 sel_gend = st.sidebar.selectbox("性別篩選", gend_opt)
 search_kw = st.sidebar.text_input("搜尋關鍵字")
 
-# --- 6. 執行計算與過濾 ---
+# --- 7. 執行計算與過濾 ---
 df = df_raw.copy()
 
 df['10-15PCS'] = df.apply(lambda r: calc_price(r, '10-59', 300, 100, m1, rate), axis=1)
@@ -102,12 +113,13 @@ if sel_gend != "全部": df = df[df['Gender'] == sel_gend]
 if search_kw: 
     df = df[
         df['Description_CH'].str.contains(search_kw, na=False, case=False) | 
-        df['Item_No'].astype(str).str.contains(search_kw, na=False)
+        df['Item_No'].str.contains(search_kw, na=False) # 這裡改用 str 因為 Item_No 已經轉過字串
     ]
 
-# --- 7. 主畫面顯示 ---
+# --- 8. 主畫面顯示 ---
 st.title("🛡️ ALÉ 代理商專業報價系統")
 
+# 初始化 Session State
 if 'cart' not in st.session_state:
     st.session_state.cart = []
 
@@ -123,9 +135,10 @@ with col_main:
             gender_label = f"({row['Gender']})" if 'Gender' in row and pd.notna(row['Gender']) else ""
             with st.expander(f"➕ {row['Item_No']} {gender_label} - {row['Description_CH']}"):
                 
-                # 圖片顯示
-                img_path_png = f"images/{row['Item_No']}.png"
-                img_path_jpg = f"images/{row['Item_No']}.jpg"
+                # 圖片路徑
+                item_no_str = str(row['Item_No']).strip()
+                img_path_png = f"images/{item_no_str}.png"
+                img_path_jpg = f"images/{item_no_str}.jpg"
                 
                 if os.path.exists(img_path_png):
                     st.image(img_path_png, width=300)
@@ -140,51 +153,53 @@ with col_main:
                 c2.metric("16-29pcs", f"${row['16-29PCS']:,}")
                 c3.metric("30-59pcs", f"${row['30-59PCS']:,}")
                 
-                if st.button("加入報價單", key=f"add_{row['Item_No']}"):
-                    st.session_state.cart.append(row.to_dict())
-                    st.toast(f"✅ 已加入 {row['Item_No']}")
+                # [修正重點] 改用 on_click 參數，這是最穩定的加入方式
+                st.button(
+                    "加入報價單", 
+                    key=f"btn_{row['Item_No']}",
+                    on_click=add_to_cart_callback,
+                    args=(row.to_dict(),) # 把整行資料傳進去
+                )
 
-# === 右側：報價清單 (修復版) ===
+# === 右側：報價清單 (極簡除錯版) ===
 with col_cart:
     st.subheader(f"🛒 報價清單 ({len(st.session_state.cart)})")
     
+    # 清空按鈕
     if st.session_state.cart:
-        if st.button("🗑️ 清空全部", use_container_width=True):
+        if st.button("🗑️ 清空全部"):
             st.session_state.cart = []
             st.rerun()
         
-        st.write("---")
-        
-        # ⚠️ 修改點：移除了 container 的高度限制，改用直接迴圈
-        # 這能避免因為版本問題導致內容消失
-        for i, item in enumerate(st.session_state.cart):
+        st.divider()
+
+        # 這裡改用最單純的寫法，保證不會有相容性問題
+        for item in st.session_state.cart:
             
-            c_img, c_info = st.columns([1, 2])
+            # 準備變數
+            i_no = str(item['Item_No']).strip()
+            p1 = item.get('10-15PCS', 0)
+            p2 = item.get('16-29PCS', 0)
+            
+            # 版面配置：左圖右文
+            c_img, c_text = st.columns([1, 2])
             
             with c_img:
-                # 圖片邏輯
-                path_png = f"images/{item['Item_No']}.png"
-                path_jpg = f"images/{item['Item_No']}.jpg"
-                
+                path_png = f"images/{i_no}.png"
+                path_jpg = f"images/{i_no}.jpg"
                 if os.path.exists(path_png):
                     st.image(path_png, use_container_width=True)
                 elif os.path.exists(path_jpg):
                     st.image(path_jpg, use_container_width=True)
                 else:
-                    # 如果沒圖片，顯示一個相機圖示佔位
-                    st.markdown("📷")
-
-            with c_info:
-                st.markdown(f"**{item['Item_No']}**")
-                # 使用 get 防止欄位遺失報錯
-                p1 = item.get('10-15PCS', 0)
-                p2 = item.get('16-29PCS', 0)
-                p3 = item.get('30-59PCS', 0)
-                
-                # 簡單顯示文字
+                    st.write("📷") # 替代文字
+            
+            with c_text:
+                st.markdown(f"**{i_no}**")
                 st.write(f"10-15pcs: **${p1:,}**")
-                st.caption(f"16-29pcs: ${p2:,} | 30-59pcs: ${p3:,}")
-
-            st.write("---") # 分隔線
+                st.caption(f"16-29pcs: ${p2:,}")
+            
+            st.divider() # 分隔線
+            
     else:
         st.info("尚未選取產品")
