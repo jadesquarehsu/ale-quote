@@ -37,9 +37,7 @@ except:
 @st.cache_data(ttl=300)
 def load_data():
     try:
-        # 讀取 CSV
         df = pd.read_csv(SHEET_URL, encoding='utf-8')
-        # 強制把 Item_No 轉成字串
         if 'Item_No' in df.columns:
             df['Item_No'] = df['Item_No'].astype(str).str.strip()
         return df
@@ -52,7 +50,7 @@ FREIGHT_MAP = {'A': 45, 'B': 63, 'C': 103, 'D': 13, 'E': 22}
 def calc_price(row, src_col, design, service, margin, rate):
     try:
         p_price = float(row[src_col])
-        if pd.isna(p_price) or p_price <= 0: return 0.0 # 改回傳 0.0 避免 NaN 導致報錯
+        if pd.isna(p_price) or p_price <= 0: return 0.0
         
         f_code = str(row['freight']).strip().upper() if 'freight' in row and pd.notna(row['freight']) else 'A'
         ship = FREIGHT_MAP.get(f_code, 45)
@@ -62,9 +60,9 @@ def calc_price(row, src_col, design, service, margin, rate):
         cost = (p_price * rate) * (1 + 0.05 + duty) + ship
         return round((cost + design + service) / (1 - margin))
     except:
-        return 0.0 # 出錯回傳 0
+        return 0.0
 
-# 回呼函數：確保按鈕點擊有效
+# 回呼函數
 def add_to_cart_callback(item_dict):
     st.session_state.cart.append(item_dict)
     st.toast(f"✅ 已加入 {item_dict.get('Item_No', '產品')}")
@@ -160,7 +158,7 @@ with col_main:
                     args=(row.to_dict(),)
                 )
 
-# === 右側：報價清單 (終極防錯版) ===
+# === 右側：報價清單 (參數修正版) ===
 with col_cart:
     st.subheader(f"🛒 報價清單 ({len(st.session_state.cart)})")
     
@@ -171,13 +169,11 @@ with col_cart:
         
         st.divider()
 
-        # 這裡加了 try-except 保護機制
         for i, item in enumerate(st.session_state.cart):
             try:
-                # 1. 準備資料 (防呆)
+                # 1. 準備資料
                 i_no = str(item.get('Item_No', '未知型號')).strip()
                 
-                # 2. 處理價格 (確保一定是數字，不是 None 或 NaN)
                 def safe_price(val):
                     try:
                         return float(val) if pd.notna(val) else 0.0
@@ -187,29 +183,28 @@ with col_cart:
                 p1 = safe_price(item.get('10-15PCS', 0))
                 p2 = safe_price(item.get('16-29PCS', 0))
                 
-                # 3. 顯示介面
+                # 2. 顯示介面
                 c_img, c_text = st.columns([1, 2])
                 
                 with c_img:
                     path_png = f"images/{i_no}.png"
                     path_jpg = f"images/{i_no}.jpg"
                     if os.path.exists(path_png):
-                        st.image(path_png, use_container_width=True)
+                        # [關鍵修正] 使用 use_column_width (舊版語法)
+                        st.image(path_png, use_column_width=True) 
                     elif os.path.exists(path_jpg):
-                        st.image(path_jpg, use_container_width=True)
+                        st.image(path_jpg, use_column_width=True)
                     else:
                         st.write("📷") 
                 
                 with c_text:
                     st.markdown(f"**{i_no}**")
-                    # 使用安全的 f-string 格式化
                     st.write(f"10-15pcs: **${p1:,.0f}**")
                     st.caption(f"16-29pcs: ${p2:,.0f}")
                 
                 st.divider()
             
             except Exception as e:
-                # 如果這筆資料真的壞了，印出紅色錯誤訊息，而不是空白
                 st.error(f"顯示錯誤: {e}")
 
     else:
