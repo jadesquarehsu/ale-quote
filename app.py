@@ -2,14 +2,15 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from urllib.parse import quote
+import os
 
-# --- 1. 網頁基本設定 (必須放第一行) ---
+# --- 1. 網頁基本設定 ---
 st.set_page_config(page_title="ALÉ 專業報價系統", layout="wide")
 
 # ==========================================
 # 🔐 安全密碼鎖
 # ==========================================
-PASSWORD = "8017" # 預設密碼
+PASSWORD = "8017"
 
 input_pass = st.sidebar.text_input("🔒 請輸入通關密碼", type="password")
 
@@ -59,7 +60,6 @@ def calc_price(row, src_col, design, service, margin, rate):
     except:
         return np.nan
 
-# 載入資料
 df_raw = load_data()
 
 if df_raw is None:
@@ -80,29 +80,25 @@ with st.sidebar.expander("📈 進階利潤率設定 (點擊展開)"):
     m3 = st.slider("30-59pcs (%)", 10, 60, 30) / 100
 
 st.sidebar.markdown("---")
-
-# === 🛠️ 這裡補回了性別選單 ===
 line_opt = ["全部"] + sorted(df_raw['Line_code'].dropna().unique().tolist()) if 'Line_code' in df_raw.columns else ["全部"]
 cate_opt = ["全部"] + sorted(df_raw['Category'].dropna().unique().tolist()) if 'Category' in df_raw.columns else ["全部"]
 gend_opt = ["全部"] + sorted(df_raw['Gender'].dropna().unique().tolist()) if 'Gender' in df_raw.columns else ["全部"]
 
 sel_line = st.sidebar.selectbox("系列篩選", line_opt)
 sel_cate = st.sidebar.selectbox("類型篩選", cate_opt)
-sel_gend = st.sidebar.selectbox("性別篩選", gend_opt) # <--- 新增這一行
+sel_gend = st.sidebar.selectbox("性別篩選", gend_opt)
 search_kw = st.sidebar.text_input("搜尋關鍵字")
 
 # --- 6. 執行計算與過濾 ---
 df = df_raw.copy()
 
-# 計算
 df['10-15PCS'] = df.apply(lambda r: calc_price(r, '10-59', 300, 100, m1, rate), axis=1)
 df['16-29PCS'] = df.apply(lambda r: calc_price(r, '10-59', 200, 62, m2, rate), axis=1)
 df['30-59PCS'] = df.apply(lambda r: calc_price(r, '10-59', 150, 33, m3, rate), axis=1)
 
-# 過濾 logic
 if sel_line != "全部": df = df[df['Line_code'] == sel_line]
 if sel_cate != "全部": df = df[df['Category'] == sel_cate]
-if sel_gend != "全部": df = df[df['Gender'] == sel_gend] # <--- 補回過濾邏輯
+if sel_gend != "全部": df = df[df['Gender'] == sel_gend]
 if search_kw: 
     df = df[
         df['Description_CH'].str.contains(search_kw, na=False, case=False) | 
@@ -123,10 +119,23 @@ with col_main:
         st.info("查無產品")
     else:
         for _, row in df.head(50).iterrows():
-            # 標題加入性別方便辨識
             gender_label = f"({row['Gender']})" if 'Gender' in row and pd.notna(row['Gender']) else ""
             with st.expander(f"➕ {row['Item_No']} {gender_label} - {row['Description_CH']}"):
                 
+                # --- [圖片顯示區塊：智慧判斷 PNG 或 JPG] ---
+                # 這裡會優先找 PNG，找不到再找 JPG
+                img_path_png = f"images/{row['Item_No']}.png"
+                img_path_jpg = f"images/{row['Item_No']}.jpg"
+                
+                if os.path.exists(img_path_png):
+                    st.image(img_path_png, width=300)
+                elif os.path.exists(img_path_jpg):
+                    st.image(img_path_jpg, width=300)
+                else:
+                    # 都找不到時留白
+                    pass 
+                # ----------------------------------------
+
                 note = row['NOTE'] if pd.notna(row['NOTE']) else "無"
                 st.write(f"**備註：** {note}")
                 
