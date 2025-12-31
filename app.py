@@ -113,6 +113,7 @@ if 'cart' not in st.session_state:
 
 col_main, col_cart = st.columns([2, 1])
 
+# === 左側：搜尋結果 ===
 with col_main:
     st.subheader(f"📦 搜尋結果 ({len(df)} 筆)")
     if df.empty:
@@ -122,8 +123,7 @@ with col_main:
             gender_label = f"({row['Gender']})" if 'Gender' in row and pd.notna(row['Gender']) else ""
             with st.expander(f"➕ {row['Item_No']} {gender_label} - {row['Description_CH']}"):
                 
-                # --- [圖片顯示區塊：智慧判斷 PNG 或 JPG] ---
-                # 這裡會優先找 PNG，找不到再找 JPG
+                # 圖片顯示
                 img_path_png = f"images/{row['Item_No']}.png"
                 img_path_jpg = f"images/{row['Item_No']}.jpg"
                 
@@ -131,11 +131,7 @@ with col_main:
                     st.image(img_path_png, width=300)
                 elif os.path.exists(img_path_jpg):
                     st.image(img_path_jpg, width=300)
-                else:
-                    # 都找不到時留白
-                    pass 
-                # ----------------------------------------
-
+                
                 note = row['NOTE'] if pd.notna(row['NOTE']) else "無"
                 st.write(f"**備註：** {note}")
                 
@@ -148,13 +144,41 @@ with col_main:
                     st.session_state.cart.append(row.to_dict())
                     st.toast(f"✅ 已加入 {row['Item_No']}")
 
+# === 右側：報價清單 (含圖片) ===
 with col_cart:
-    st.subheader("🛒 報價清單")
+    st.subheader(f"🛒 報價清單 ({len(st.session_state.cart)})")
+    
     if st.session_state.cart:
-        cart_df = pd.DataFrame(st.session_state.cart)
-        st.dataframe(cart_df[['Item_No', '10-15PCS', '16-29PCS']], use_container_width=True)
-        if st.button("🗑️ 清空全部"):
+        if st.button("🗑️ 清空全部", use_container_width=True):
             st.session_state.cart = []
             st.rerun()
+        
+        st.write("---")
+        
+        # 建立一個可捲動的容器，高度 600px
+        # 這樣清單太長時，不會把整頁撐開，而是可以在內部滑動
+        with st.container(height=600, border=True):
+            for i, item in enumerate(st.session_state.cart):
+                # 建立左右兩欄：左邊放圖，右邊放資訊
+                c_img, c_info = st.columns([1, 2])
+                
+                with c_img:
+                    # 購物車裡的圖片邏輯
+                    path_png = f"images/{item['Item_No']}.png"
+                    path_jpg = f"images/{item['Item_No']}.jpg"
+                    if os.path.exists(path_png):
+                        st.image(path_png, use_container_width=True)
+                    elif os.path.exists(path_jpg):
+                        st.image(path_jpg, use_container_width=True)
+                    else:
+                        st.write("📷") # 無圖示
+                
+                with c_info:
+                    st.markdown(f"**{item['Item_No']}**")
+                    # 顯示 10-15pcs 的價格作為代表，或者您可以列出全部
+                    st.caption(f"10-15pcs: **${item['10-15PCS']:,}**")
+                    st.caption(f"16-29pcs: ${item['16-29PCS']:,}")
+                
+                st.write("---") # 分隔線
     else:
         st.info("尚未選取")
