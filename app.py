@@ -39,7 +39,7 @@ def load_data():
     try:
         # 讀取 CSV
         df = pd.read_csv(SHEET_URL, encoding='utf-8')
-        # [關鍵修正] 強制把 Item_No 轉成字串，並去除前後空白，避免對不到圖
+        # 強制把 Item_No 轉成字串
         if 'Item_No' in df.columns:
             df['Item_No'] = df['Item_No'].astype(str).str.strip()
         return df
@@ -52,7 +52,7 @@ FREIGHT_MAP = {'A': 45, 'B': 63, 'C': 103, 'D': 13, 'E': 22}
 def calc_price(row, src_col, design, service, margin, rate):
     try:
         p_price = float(row[src_col])
-        if pd.isna(p_price) or p_price <= 0: return np.nan
+        if pd.isna(p_price) or p_price <= 0: return 0.0 # 改回傳 0.0 避免 NaN 導致報錯
         
         f_code = str(row['freight']).strip().upper() if 'freight' in row and pd.notna(row['freight']) else 'A'
         ship = FREIGHT_MAP.get(f_code, 45)
@@ -62,13 +62,12 @@ def calc_price(row, src_col, design, service, margin, rate):
         cost = (p_price * rate) * (1 + 0.05 + duty) + ship
         return round((cost + design + service) / (1 - margin))
     except:
-        return np.nan
+        return 0.0 # 出錯回傳 0
 
-# --- 5. [新增] 加入購物車的專用函數 (CallBack) ---
-# 這是讓按鈕絕對有效的關鍵
+# 回呼函數：確保按鈕點擊有效
 def add_to_cart_callback(item_dict):
     st.session_state.cart.append(item_dict)
-    st.toast(f"✅ 已加入 {item_dict['Item_No']}")
+    st.toast(f"✅ 已加入 {item_dict.get('Item_No', '產品')}")
 
 # 載入資料
 df_raw = load_data()
@@ -113,13 +112,12 @@ if sel_gend != "全部": df = df[df['Gender'] == sel_gend]
 if search_kw: 
     df = df[
         df['Description_CH'].str.contains(search_kw, na=False, case=False) | 
-        df['Item_No'].str.contains(search_kw, na=False) # 這裡改用 str 因為 Item_No 已經轉過字串
+        df['Item_No'].str.contains(search_kw, na=False)
     ]
 
 # --- 8. 主畫面顯示 ---
 st.title("🛡️ ALÉ 代理商專業報價系統")
 
-# 初始化 Session State
 if 'cart' not in st.session_state:
     st.session_state.cart = []
 
@@ -135,7 +133,7 @@ with col_main:
             gender_label = f"({row['Gender']})" if 'Gender' in row and pd.notna(row['Gender']) else ""
             with st.expander(f"➕ {row['Item_No']} {gender_label} - {row['Description_CH']}"):
                 
-                # 圖片路徑
+                # 顯示圖片
                 item_no_str = str(row['Item_No']).strip()
                 img_path_png = f"images/{item_no_str}.png"
                 img_path_jpg = f"images/{item_no_str}.jpg"
@@ -145,6 +143,7 @@ with col_main:
                 elif os.path.exists(img_path_jpg):
                     st.image(img_path_jpg, width=300)
                 
+                # 顯示資訊
                 note = row['NOTE'] if pd.notna(row['NOTE']) else "無"
                 st.write(f"**備註：** {note}")
                 
@@ -153,19 +152,18 @@ with col_main:
                 c2.metric("16-29pcs", f"${row['16-29PCS']:,}")
                 c3.metric("30-59pcs", f"${row['30-59PCS']:,}")
                 
-                # [修正重點] 改用 on_click 參數，這是最穩定的加入方式
+                # 加入按鈕
                 st.button(
                     "加入報價單", 
                     key=f"btn_{row['Item_No']}",
                     on_click=add_to_cart_callback,
-                    args=(row.to_dict(),) # 把整行資料傳進去
+                    args=(row.to_dict(),)
                 )
 
-# === 右側：報價清單 (極簡除錯版) ===
+# === 右側：報價清單 (終極防錯版) ===
 with col_cart:
     st.subheader(f"🛒 報價清單 ({len(st.session_state.cart)})")
     
-    # 清空按鈕
     if st.session_state.cart:
         if st.button("🗑️ 清空全部"):
             st.session_state.cart = []
@@ -173,33 +171,46 @@ with col_cart:
         
         st.divider()
 
-        # 這裡改用最單純的寫法，保證不會有相容性問題
-        for item in st.session_state.cart:
+        # 這裡加了 try-except 保護機制
+        for i, item in enumerate(st.session_state.cart):
+            try:
+                # 1. 準備資料 (防呆)
+                i_no = str(item.get('Item_No', '未知型號')).strip()
+                
+                # 2. 處理價格 (確保一定是數字，不是 None 或 NaN)
+                def safe_price(val):
+                    try:
+                        return float(val) if pd.notna(val) else 0.0
+                    except:
+                        return 0.0
+                
+                p1 = safe_price(item.get('10-15PCS', 0))
+                p2 = safe_price(item.get('16-29PCS', 0))
+                
+                # 3. 顯示介面
+                c_img, c_text = st.columns([1, 2])
+                
+                with c_img:
+                    path_png = f"images/{i_no}.png"
+                    path_jpg = f"images/{i_no}.jpg"
+                    if os.path.exists(path_png):
+                        st.image(path_png, use_container_width=True)
+                    elif os.path.exists(path_jpg):
+                        st.image(path_jpg, use_container_width=True)
+                    else:
+                        st.write("📷") 
+                
+                with c_text:
+                    st.markdown(f"**{i_no}**")
+                    # 使用安全的 f-string 格式化
+                    st.write(f"10-15pcs: **${p1:,.0f}**")
+                    st.caption(f"16-29pcs: ${p2:,.0f}")
+                
+                st.divider()
             
-            # 準備變數
-            i_no = str(item['Item_No']).strip()
-            p1 = item.get('10-15PCS', 0)
-            p2 = item.get('16-29PCS', 0)
-            
-            # 版面配置：左圖右文
-            c_img, c_text = st.columns([1, 2])
-            
-            with c_img:
-                path_png = f"images/{i_no}.png"
-                path_jpg = f"images/{i_no}.jpg"
-                if os.path.exists(path_png):
-                    st.image(path_png, use_container_width=True)
-                elif os.path.exists(path_jpg):
-                    st.image(path_jpg, use_container_width=True)
-                else:
-                    st.write("📷") # 替代文字
-            
-            with c_text:
-                st.markdown(f"**{i_no}**")
-                st.write(f"10-15pcs: **${p1:,}**")
-                st.caption(f"16-29pcs: ${p2:,}")
-            
-            st.divider() # 分隔線
-            
+            except Exception as e:
+                # 如果這筆資料真的壞了，印出紅色錯誤訊息，而不是空白
+                st.error(f"顯示錯誤: {e}")
+
     else:
         st.info("尚未選取產品")
