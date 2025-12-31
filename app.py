@@ -144,7 +144,7 @@ with col_main:
                     st.session_state.cart.append(row.to_dict())
                     st.toast(f"✅ 已加入 {row['Item_No']}")
 
-# === 右側：報價清單 (含圖片) ===
+# === 右側：報價清單 (修復版) ===
 with col_cart:
     st.subheader(f"🛒 報價清單 ({len(st.session_state.cart)})")
     
@@ -155,30 +155,36 @@ with col_cart:
         
         st.write("---")
         
-        # 建立一個可捲動的容器，高度 600px
-        # 這樣清單太長時，不會把整頁撐開，而是可以在內部滑動
-        with st.container(height=600, border=True):
-            for i, item in enumerate(st.session_state.cart):
-                # 建立左右兩欄：左邊放圖，右邊放資訊
-                c_img, c_info = st.columns([1, 2])
+        # ⚠️ 修改點：移除了 container 的高度限制，改用直接迴圈
+        # 這能避免因為版本問題導致內容消失
+        for i, item in enumerate(st.session_state.cart):
+            
+            c_img, c_info = st.columns([1, 2])
+            
+            with c_img:
+                # 圖片邏輯
+                path_png = f"images/{item['Item_No']}.png"
+                path_jpg = f"images/{item['Item_No']}.jpg"
                 
-                with c_img:
-                    # 購物車裡的圖片邏輯
-                    path_png = f"images/{item['Item_No']}.png"
-                    path_jpg = f"images/{item['Item_No']}.jpg"
-                    if os.path.exists(path_png):
-                        st.image(path_png, use_container_width=True)
-                    elif os.path.exists(path_jpg):
-                        st.image(path_jpg, use_container_width=True)
-                    else:
-                        st.write("📷") # 無圖示
+                if os.path.exists(path_png):
+                    st.image(path_png, use_container_width=True)
+                elif os.path.exists(path_jpg):
+                    st.image(path_jpg, use_container_width=True)
+                else:
+                    # 如果沒圖片，顯示一個相機圖示佔位
+                    st.markdown("📷")
+
+            with c_info:
+                st.markdown(f"**{item['Item_No']}**")
+                # 使用 get 防止欄位遺失報錯
+                p1 = item.get('10-15PCS', 0)
+                p2 = item.get('16-29PCS', 0)
+                p3 = item.get('30-59PCS', 0)
                 
-                with c_info:
-                    st.markdown(f"**{item['Item_No']}**")
-                    # 顯示 10-15pcs 的價格作為代表，或者您可以列出全部
-                    st.caption(f"10-15pcs: **${item['10-15PCS']:,}**")
-                    st.caption(f"16-29pcs: ${item['16-29PCS']:,}")
-                
-                st.write("---") # 分隔線
+                # 簡單顯示文字
+                st.write(f"10-15pcs: **${p1:,}**")
+                st.caption(f"16-29pcs: ${p2:,} | 30-59pcs: ${p3:,}")
+
+            st.write("---") # 分隔線
     else:
-        st.info("尚未選取")
+        st.info("尚未選取產品")
