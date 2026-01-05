@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 from urllib.parse import quote
 import os
+import io  # 新增：用於處理 Excel 檔案匯出
 
 # --- 1. 網頁基本設定 ---
 st.set_page_config(page_title="ALÉ 專業報價系統", layout="wide")
@@ -17,6 +18,7 @@ input_pass = st.sidebar.text_input("🔒 請輸入通關密碼", type="password"
 if input_pass != PASSWORD:
     st.sidebar.warning("❌ 未輸入或密碼錯誤")
     st.markdown("## 🔒 系統已鎖定")
+    st.info("⚠️ 請在左側輸入密碼以存取報價系統。")
     st.stop() 
 
 # ==========================================
@@ -38,8 +40,17 @@ except:
 def load_data():
     try:
         df = pd.read_csv(SHEET_URL, encoding='utf-8')
+        # 資料清理：確保重要欄位是字串格式，避免報錯
         if 'Item_No' in df.columns:
             df['Item_No'] = df['Item_No'].astype(str).str.strip()
+        
+        # 預先處理圖片欄位，轉為字串並去除空白
+        for col in ['pic code_1', 'pic code_2']:
+            if col in df.columns:
+                df[col] = df[col].astype(str).str.strip()
+            else:
+                df[col] = "" # 如果 Google Sheet 沒這欄，就補空字串
+                
         return df
     except:
         return None
@@ -62,7 +73,7 @@ def calc_price(row, src_col, design, service, margin, rate):
     except:
         return 0.0
 
-# 回呼函數
+# 回呼函數 (加入購物車)
 def add_to_cart_callback(item_dict):
     st.session_state.cart.append(item_dict)
     st.toast(f"✅ 已加入 {item_dict.get('Item_No', '產品')}")
@@ -76,7 +87,7 @@ if df_raw is None:
 
 df_raw.columns = df_raw.columns.str.strip()
 
-# --- 6. 參數設定面板 ---
+# --- 5. 參數設定面板 ---
 st.sidebar.success("✅ 已解鎖")
 st.sidebar.markdown("---")
 st.sidebar.header("⚙️ 參數設定")
@@ -97,7 +108,7 @@ sel_cate = st.sidebar.selectbox("類型篩選", cate_opt)
 sel_gend = st.sidebar.selectbox("性別篩選", gend_opt)
 search_kw = st.sidebar.text_input("搜尋關鍵字")
 
-# --- 7. 執行計算與過濾 ---
+# --- 6. 執行計算與過濾 ---
 df = df_raw.copy()
 
 df['10-15PCS'] = df.apply(lambda r: calc_price(r, '10-59', 300, 100, m1, rate), axis=1)
@@ -113,7 +124,7 @@ if search_kw:
         df['Item_No'].str.contains(search_kw, na=False)
     ]
 
-# --- 8. 主畫面顯示 ---
+# --- 7. 主畫面顯示 ---
 st.title("🛡️ ALÉ 代理商專業報價系統")
 
 if 'cart' not in st.session_state:
@@ -121,7 +132,7 @@ if 'cart' not in st.session_state:
 
 col_main, col_cart = st.columns([2, 1])
 
-# === 左側：搜尋結果 ===
+# === 左側：搜尋結果 (含雙圖片顯示) ===
 with col_main:
     st.subheader(f"📦 搜尋結果 ({len(df)} 筆)")
     if df.empty:
@@ -131,16 +142,38 @@ with col_main:
             gender_label = f"({row['Gender']})" if 'Gender' in row and pd.notna(row['Gender']) else ""
             with st.expander(f"➕ {row['Item_No']} {gender_label} - {row['Description_CH']}"):
                 
-                # 顯示圖片
-                item_no_str = str(row['Item_No']).strip()
-                img_path_png = f"images/{item_no_str}.png"
-                img_path_jpg = f"images/{item_no_str}.jpg"
-                
-                if os.path.exists(img_path_png):
-                    st.image(img_path_png, width=300)
-                elif os.path.exists(img_path_jpg):
-                    st.image(img_path_jpg, width=300)
-                
+                # --- [圖片顯示區塊：讀取 pic code_1 和 pic code_2] ---
+                # 1. 取得檔名 (處理 nan 或空值)
+                img_name_1 = row['pic code_1'] if row['pic code_1'] != "nan" else ""
+                img_name_2 = row['pic code_2'] if row['pic code_2'] != "nan" else ""
+
+                # 2. 組合路徑
+                path_1 = f"images/{img_name_1}" if img_name_1 else None
+                path_2 = f"images/{img_name_2}" if img_name_2 else None
+
+                # 3. 檢查是否存在
+                has_img_1 = path_1 and os.path.exists(path_1)
+                has_img_2 = path_2 and os.path.exists(path_2)
+
+                # 4. 顯示邏輯
+                if has_img_1 and has_img_2:
+                    c_img1, c_img2 = st.columns(2)
+                    with c_img1: st.image(path_1, caption="正面", use_container_width=True)
+                    with c_img2: st.image(path_2, caption="背面", use_container_width=True)
+                elif has_img_1:
+                    st.image(path_1, caption="正面", width=300)
+                elif has_img_2:
+                    st.image(path_2, caption="背面", width=300)
+                else:
+                    # 如果兩個指定欄位都沒圖，嘗試舊方法 (用 Item_No 找)
+                    old_png = f"images/{row['Item_No']}.png"
+                    old_jpg = f"images/{row['Item_No']}.jpg"
+                    if os.path.exists(old_png):
+                        st.image(old_png, width=300)
+                    elif os.path.exists(old_jpg):
+                        st.image(old_jpg, width=300)
+                # ---------------------------------------------------
+
                 # 顯示資訊
                 note = row['NOTE'] if pd.notna(row['NOTE']) else "無"
                 st.write(f"**備註：** {note}")
@@ -158,54 +191,48 @@ with col_main:
                     args=(row.to_dict(),)
                 )
 
-# === 右側：報價清單 (參數修正版) ===
+# === 右側：報價清單 (含 Excel 下載) ===
 with col_cart:
     st.subheader(f"🛒 報價清單 ({len(st.session_state.cart)})")
     
     if st.session_state.cart:
+        # 將購物車轉為 DataFrame
+        cart_df = pd.DataFrame(st.session_state.cart)
+        
+        # 整理要匯出的欄位
+        display_cols = ['Item_No', 'Description_CH', '10-15PCS', '16-29PCS', '30-59PCS', 'NOTE']
+        valid_cols = [c for c in display_cols if c in cart_df.columns]
+        
+        # 顯示簡易表格
+        st.dataframe(cart_df[valid_cols], use_container_width=True)
+
+        # --- 新增功能：匯出 Excel ---
+        output = io.BytesIO()
+        try:
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                cart_df[valid_cols].to_excel(writer, index=False, sheet_name='報價單')
+                
+                # 自動調整欄寬
+                workbook = writer.book
+                worksheet = writer.sheets['報價單']
+                worksheet.set_column('A:A', 15) # 料號
+                worksheet.set_column('B:B', 30) # 品名
+                
+            excel_data = output.getvalue()
+
+            st.download_button(
+                label="📥 下載 Excel 報價單",
+                data=excel_data,
+                file_name="ALE_Quote.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+        except Exception as e:
+            st.error(f"Excel 產生失敗: {e}，請確認已安裝 xlsxwriter 套件")
+
+        st.divider()
         if st.button("🗑️ 清空全部"):
             st.session_state.cart = []
             st.rerun()
-        
-        st.divider()
-
-        for i, item in enumerate(st.session_state.cart):
-            try:
-                # 1. 準備資料
-                i_no = str(item.get('Item_No', '未知型號')).strip()
-                
-                def safe_price(val):
-                    try:
-                        return float(val) if pd.notna(val) else 0.0
-                    except:
-                        return 0.0
-                
-                p1 = safe_price(item.get('10-15PCS', 0))
-                p2 = safe_price(item.get('16-29PCS', 0))
-                
-                # 2. 顯示介面
-                c_img, c_text = st.columns([1, 2])
-                
-                with c_img:
-                    path_png = f"images/{i_no}.png"
-                    path_jpg = f"images/{i_no}.jpg"
-                    if os.path.exists(path_png):
-                        # [關鍵修正] 使用 use_column_width (舊版語法)
-                        st.image(path_png, use_column_width=True) 
-                    elif os.path.exists(path_jpg):
-                        st.image(path_jpg, use_column_width=True)
-                    else:
-                        st.write("📷") 
-                
-                with c_text:
-                    st.markdown(f"**{i_no}**")
-                    st.write(f"10-15pcs: **${p1:,.0f}**")
-                    st.caption(f"16-29pcs: ${p2:,.0f}")
-                
-                st.divider()
-            
-            except Exception as e:
-                st.error(f"顯示錯誤: {e}")
 
     else:
-        st.info("尚未選取產品")
+        st.info("尚未選取任何產品")
