@@ -236,3 +236,27 @@ with col_cart:
 
     else:
         st.info("尚未選取任何產品")
+        # ==========================================
+# 🕵️‍♂️ 圖片偵錯模式 (確認圖片修復後可刪除)
+# ==========================================
+st.divider()
+st.header("🕵️‍♂️ 系統檢測報告")
+
+folder_path = "images"
+
+if os.path.exists(folder_path):
+    file_list = os.listdir(folder_path)
+    st.success(f"✅ 成功找到 'images' 資料夾！裡面共有 {len(file_list)} 個檔案。")
+    
+    st.write("👇 這是系統抓到的前 5 個檔名 (請檢查跟 Excel 裡的一不一樣)：")
+    st.code(file_list[:5]) # 顯示前5個
+    
+    # 幫你檢查有沒有副檔名大小寫問題
+    jpg_count = sum(1 for f in file_list if f.lower().endswith('.jpg'))
+    png_count = sum(1 for f in file_list if f.lower().endswith('.png'))
+    st.info(f"📊 統計：JPG 檔 {jpg_count} 個 / PNG 檔 {png_count} 個")
+else:
+    st.error(f"❌ 系統找不到 '{folder_path}' 資料夾！")
+    st.warning("請確認 GitHub 上的資料夾名稱是否全小寫，且位於專案最外層。")
+    # 印出當前目錄下有什麼，幫你找位置
+    st.write("目前所在的目錄檔案有：", os.listdir("."))
