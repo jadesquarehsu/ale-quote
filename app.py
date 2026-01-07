@@ -104,24 +104,38 @@ def find_image_robust(filename):
             
     return None
 
-# 【關鍵修正】圖片預處理函數：強制重設大小並清除 DPI 資訊
+# 【關鍵修正 V21】圖片預處理：強制大小 + 透明轉白底
 def process_image_for_excel(image_path, max_width, max_height):
     try:
         with Image.open(image_path) as img:
-            # 轉換為 RGB 以防相容性問題
-            if img.mode != 'RGB':
+            # 1. 處理透明背景 -> 轉為白底
+            # 檢查是否為 RGBA (有透明度) 或 P 模式且有透明設定
+            if img.mode in ('RGBA', 'LA') or (img.mode == 'P' and 'transparency' in img.info):
+                # 確保是 RGBA 模式以便提取 alpha 通道
+                img = img.convert('RGBA')
+                # 建立一個純白背景 (RGB 模式)
+                background = Image.new('RGB', img.size, (255, 255, 255))
+                # 將原圖貼到白底上，使用 alpha 通道作為遮罩
+                # 這樣透明的地方就會露出白底
+                background.paste(img, mask=img.split()[3])
+                img = background
+            elif img.mode != 'RGB':
+                # 如果不是透明圖，但也不是 RGB (例如 CMYK 或灰階)，轉為 RGB
                 img = img.convert('RGB')
             
-            # 計算縮放比例 (保持長寬比)
+            # 到這裡，img 已經是一張純 RGB 的白底圖片了
+
+            # 2. 計算縮放比例 (保持長寬比)
             img.thumbnail((max_width, max_height), Image.Resampling.LANCZOS)
             
-            # 存入記憶體
+            # 3. 存入記憶體
             output = io.BytesIO()
             img.save(output, format='PNG')
             output.seek(0)
             
             return output, img.width, img.height
-    except:
+    except Exception as e:
+        # print(f"Image processing error: {e}") # Debug 用
         return None, 0, 0
 
 # 回呼函數
@@ -312,11 +326,9 @@ with col_cart:
                 })
                 
                 # --- B. 設定欄寬與列高參數 ---
-                # A欄寬度 26 (約 190 px)
                 COL_WIDTH_EXCEL = 26
                 CELL_W_PX = 190
                 
-                # 列高 150 (約 200 px)
                 ROW_HEIGHT_EXCEL = 150
                 CELL_H_PX = 200
                 
@@ -330,27 +342,21 @@ with col_cart:
                 
                 worksheet.set_row(0, 20) 
 
-                # 【修正1】Logo 垂直置中 (使用圖片預處理)
                 header_row_height = 100
                 worksheet.set_row(1, header_row_height) 
 
                 logo_file = "images/logo-ale b.png"
                 if os.path.exists(logo_file):
-                    # 強制處理 Logo 大小: 高度 80px (寬度等比)
-                    # Logo 原始寬高未知，但我們目標是高度 80
-                    # 這裡先偷懶用目標高度，讓 process_image 自動處理
-                    # 但因為 thumbnail 需要寬度，我們先給個夠大的寬度
+                    # Logo 也套用白底處理，確保乾淨
                     logo_target_h = 80
                     logo_img_buffer, w, h = process_image_for_excel(logo_file, 500, logo_target_h)
                     
                     if logo_img_buffer:
-                        # 計算置中
-                        # Row height 100 pt = 133 px
-                        # Logo height = 80 px (因為我們強制縮放了)
-                        y_offset = (133 - h) / 2 # 動態計算實際高度的置中
+                        # 計算置中: (133 - 實際高度) / 2
+                        y_offset = (133 - h) / 2 
 
                         worksheet.insert_image('A2', logo_file, {
-                            'image_data': logo_img_buffer, # 直接插入記憶體中的圖片
+                            'image_data': logo_img_buffer,
                             'x_offset': 10, 
                             'y_offset': y_offset 
                         })
@@ -398,7 +404,6 @@ with col_cart:
                 
                 # --- D. 寫入表格 ---
                 start_row = 8
-                # 【修正3】標題列高度改為 30
                 worksheet.set_row(start_row, 30)
                 
                 headers = ['產品圖片', '型號', '中文品名', '10-15PCS', '16-29PCS', '30-59PCS', '備註']
@@ -411,7 +416,6 @@ with col_cart:
                     worksheet.set_row(current_row, ROW_HEIGHT_EXCEL)
                     worksheet.write_blank(current_row, 0, "", fmt_center)
 
-                    # 【修正2】圖片強制放大處理
                     p_code = item.get('pic code_1', '')
                     if not p_code or str(p_code) == 'nan':
                         p_code = item.get('Item_No', '')
@@ -419,12 +423,11 @@ with col_cart:
                     img_path = find_image_robust(p_code)
                     
                     if img_path:
-                        # 強制將圖片處理成接近格子大小 (180x180)，消除 DPI 影響
-                        # 我們設定最大寬高為 180 (略小於 190x200 的格子)
+                        # 使用新的白底處理函數，強制尺寸約 180x180
                         img_buffer, final_w, final_h = process_image_for_excel(img_path, 180, 180)
                         
                         if img_buffer:
-                            # 計算置中 (格子寬約 190, 高 200)
+                            # 計算置中
                             x_off = (CELL_W_PX - final_w) / 2
                             y_off = (CELL_H_PX - final_h) / 2
                             
