@@ -234,12 +234,15 @@ with col_cart:
                 workbook = writer.book
                 worksheet = workbook.add_worksheet('報價單')
                 
-                # 指定字體
                 target_font = 'Noto Sans CJK TC' 
                 
                 # --- A. 定義格式 (Styles) ---
                 fmt_title = workbook.add_format({
                     'bold': True, 'font_size': 20, 'align': 'center', 'valign': 'vcenter',
+                    'font_name': target_font
+                })
+                fmt_date = workbook.add_format({
+                    'bold': True, 'font_size': 12, 'align': 'right', 'valign': 'vcenter',
                     'font_name': target_font
                 })
                 fmt_label = workbook.add_format({
@@ -268,13 +271,12 @@ with col_cart:
                     'font_name': target_font
                 })
                 
-                # --- B. 設定欄寬與列高參數 (關鍵調整：變矮胖) ---
-                # A欄寬度 38 (約 270px)
-                COL_WIDTH_EXCEL = 38
-                COL_WIDTH_PIXELS = 270
+                # --- B. 設定欄寬與列高參數 ---
+                # 調整重點：讓格子變矮胖，符合照片比例
+                COL_WIDTH_EXCEL = 38  # 約 270px 寬
+                COL_WIDTH_PIXELS = 270 
                 
-                # 列高縮小到 150 (約 200px) -> 讓格子變正方形一點，照片視覺會變大
-                ROW_HEIGHT_EXCEL = 150
+                ROW_HEIGHT_EXCEL = 150 # 改回 150 (約 200px 高)，這樣照片會撐滿且視覺變大
                 ROW_HEIGHT_PIXELS = 200
                 
                 worksheet.set_column('A:A', COL_WIDTH_EXCEL) 
@@ -288,14 +290,13 @@ with col_cart:
                 # Row 0: 頂部留白
                 worksheet.set_row(0, 20)
 
-                # Row 1: Logo 獨立放大 (放在 A2)
+                # Row 1: Logo 獨立 (A2)
                 logo_file = "images/logo-ale b.png"
                 if os.path.exists(logo_file):
                     try:
                         with Image.open(logo_file) as img:
                             w, h = img.size
-                            # [關鍵修改] Logo 放大: 高度設為 80
-                            target_h = 80
+                            target_h = 70 # Logo 高度設定
                             scale = target_h / h
                             worksheet.insert_image('A2', logo_file, {
                                 'x_scale': scale, 'y_scale': scale,
@@ -304,28 +305,34 @@ with col_cart:
                     except:
                         pass
                 
-                # 設定 Row 1 高度，讓 Logo 有空間
-                worksheet.set_row(1, 70)
+                worksheet.set_row(1, 60) # Logo 該列高度
 
-                # 標題 (往右移，不跟 Logo 擠)
+                # 標題 (B2:G2)
                 worksheet.merge_range('B2:G2', 'ALÉ 訂製車衣報價單', fmt_title)
                 
-                # Row 2, 3: [關鍵修改] 插入兩行空白，把隊伍資訊往下推
-                worksheet.set_row(2, 20) 
-                worksheet.set_row(3, 20)
+                # Row 2: 【新增】報價日期
+                quote_date_str = datetime.now().strftime("%Y/%m/%d")
+                worksheet.merge_range('A3:G3', f"報價日期：{quote_date_str}", fmt_date)
                 
-                # Row 4-5: 客戶填寫區
+                # Row 3: 空白行 (分隔線)
+                worksheet.set_row(3, 10)
+                
+                # Row 4: 隊名/聯絡人
                 worksheet.write('A5', '隊名：__________________________________', fmt_label)
                 worksheet.write('C5', '聯絡人：____________________', fmt_label)
-                worksheet.write('A6', '電話：__________________________________', fmt_label)
-                worksheet.write('C6', '地址：___________________________________________', fmt_label)
+                
+                # Row 5: 空白行 (增加手寫行距)
+                worksheet.set_row(5, 25)
 
-                # Row 6: 表格前再留白
-                worksheet.set_row(6, 20)
+                # Row 6: 電話/地址
+                worksheet.write('A7', '電話：__________________________________', fmt_label)
+                worksheet.write('C7', '地址：___________________________________________', fmt_label)
+
+                # Row 7: 表格前留白
+                worksheet.set_row(7, 20)
                 
                 # --- D. 寫入表格 ---
-                # 表格從第 8 列開始 (Row 7)
-                start_row = 7
+                start_row = 8
                 headers = ['產品圖片', '型號', '中文品名', '10-15PCS', '16-29PCS', '30-59PCS', '備註']
                 for col_num, header in enumerate(headers):
                     worksheet.write(start_row, col_num, header, fmt_header)
@@ -333,7 +340,7 @@ with col_cart:
                 current_row = start_row + 1
                 
                 for i, item in enumerate(st.session_state.cart):
-                    # 設定這一列的高度 (縮小了，讓照片看起來更滿)
+                    # 設定這一列的高度 (150 -> 讓照片看起來比較大)
                     worksheet.set_row(current_row, ROW_HEIGHT_EXCEL)
                     
                     # 1. 圖片處理 (撐滿邏輯)
@@ -348,9 +355,9 @@ with col_cart:
                             with Image.open(img_path) as im:
                                 orig_w, orig_h = im.size
                                 
-                                # 幾乎不留邊距 (-2px)
-                                avail_w = COL_WIDTH_PIXELS - 2
-                                avail_h = ROW_HEIGHT_PIXELS - 2
+                                # 幾乎不留邊距
+                                avail_w = COL_WIDTH_PIXELS - 5
+                                avail_h = ROW_HEIGHT_PIXELS - 5
                                 
                                 ratio_w = avail_w / orig_w
                                 ratio_h = avail_h / orig_h
@@ -397,9 +404,10 @@ with col_cart:
                 footer_row = current_row + 1
                 valid_date = (datetime.now() + timedelta(days=30)).strftime("%Y/%m/%d")
                 
+                # 依指示更新文字
                 terms = (
                     f"▶ 報價已含 5% 營業稅\n"
-                    f"▶ 報價有效期限：{valid_date} \n"
+                    f"▶ 報價有效期限：{valid_date}\n"
                     f"▶ 提供尺寸套量，預付套量押金 NT 5,000 元，退回套量後押金會退還或是轉作訂製訂金。\n\n"
                     f"【匯款資訊】\n"
                     f"銀行：彰化銀行 (代碼 009) 北屯分行\n"
@@ -409,7 +417,7 @@ with col_cart:
                     f"禾宏文化資訊有限公司 | 聯絡人：徐郁芳 | TEL: 04-24369368 ext19 | Email: uma@hehong.com.tw"
                 )
                 
-                worksheet.set_row(footer_row, 220) 
+                worksheet.set_row(footer_row, 240) 
                 worksheet.merge_range(footer_row, 0, footer_row, 6, terms, fmt_footer)
 
             excel_data = output.getvalue()
