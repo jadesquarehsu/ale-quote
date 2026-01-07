@@ -104,6 +104,26 @@ def find_image_robust(filename):
             
     return None
 
+# 【關鍵修正】圖片預處理函數：強制重設大小並清除 DPI 資訊
+def process_image_for_excel(image_path, max_width, max_height):
+    try:
+        with Image.open(image_path) as img:
+            # 轉換為 RGB 以防相容性問題
+            if img.mode != 'RGB':
+                img = img.convert('RGB')
+            
+            # 計算縮放比例 (保持長寬比)
+            img.thumbnail((max_width, max_height), Image.Resampling.LANCZOS)
+            
+            # 存入記憶體
+            output = io.BytesIO()
+            img.save(output, format='PNG')
+            output.seek(0)
+            
+            return output, img.width, img.height
+    except:
+        return None, 0, 0
+
 # 回呼函數
 def add_to_cart_callback(item_dict):
     st.session_state.cart.append(item_dict)
@@ -242,6 +262,7 @@ with col_cart:
                 workbook = writer.book
                 worksheet = workbook.add_worksheet('報價單')
                 
+                # 隱藏預設格線
                 worksheet.hide_gridlines(2)
                 
                 target_font = 'Noto Sans CJK TC' 
@@ -291,13 +312,13 @@ with col_cart:
                 })
                 
                 # --- B. 設定欄寬與列高參數 ---
+                # A欄寬度 26 (約 190 px)
                 COL_WIDTH_EXCEL = 26
-                # Excel 單位換算：26 chars 約等於 189 pixels
-                # 列高 150 points 約等於 200 pixels
-                CELL_W_PX = 189
-                CELL_H_PX = 200
+                CELL_W_PX = 190
                 
+                # 列高 150 (約 200 px)
                 ROW_HEIGHT_EXCEL = 150
+                CELL_H_PX = 200
                 
                 worksheet.set_column('A:A', COL_WIDTH_EXCEL) 
                 worksheet.set_column('B:B', 20)
@@ -309,33 +330,41 @@ with col_cart:
                 
                 worksheet.set_row(0, 20) 
 
+                # 【修正1】Logo 垂直置中 (使用圖片預處理)
                 header_row_height = 100
                 worksheet.set_row(1, header_row_height) 
 
                 logo_file = "images/logo-ale b.png"
                 if os.path.exists(logo_file):
-                    try:
-                        with Image.open(logo_file) as img:
-                            w, h = img.size
-                            target_h = 70 
-                            scale = target_h / h
-                            
-                            y_offset = 31 
+                    # 強制處理 Logo 大小: 高度 80px (寬度等比)
+                    # Logo 原始寬高未知，但我們目標是高度 80
+                    # 這裡先偷懶用目標高度，讓 process_image 自動處理
+                    # 但因為 thumbnail 需要寬度，我們先給個夠大的寬度
+                    logo_target_h = 80
+                    logo_img_buffer, w, h = process_image_for_excel(logo_file, 500, logo_target_h)
+                    
+                    if logo_img_buffer:
+                        # 計算置中
+                        # Row height 100 pt = 133 px
+                        # Logo height = 80 px (因為我們強制縮放了)
+                        y_offset = (133 - h) / 2 # 動態計算實際高度的置中
 
-                            worksheet.insert_image('A2', logo_file, {
-                                'x_scale': scale, 'y_scale': scale,
-                                'x_offset': 10, 'y_offset': y_offset 
-                            })
-                    except:
-                        pass
+                        worksheet.insert_image('A2', logo_file, {
+                            'image_data': logo_img_buffer, # 直接插入記憶體中的圖片
+                            'x_offset': 10, 
+                            'y_offset': y_offset 
+                        })
 
+                # 標題
                 worksheet.merge_range('B2:G2', 'ALÉ 訂製車衣報價單', fmt_title)
                 
+                # 報價日期
                 quote_date_str = datetime.now().strftime("%Y/%m/%d")
                 worksheet.merge_range('A3:G3', f"報價日期：{quote_date_str}", fmt_date)
                 
                 worksheet.set_row(3, 10)
                 
+                # 客戶資訊
                 t_team = client_team if client_team else "________________________"
                 t_contact = client_contact if client_contact else "____________"
                 t_phone = client_phone if client_phone else "________________________"
@@ -369,6 +398,7 @@ with col_cart:
                 
                 # --- D. 寫入表格 ---
                 start_row = 8
+                # 【修正3】標題列高度改為 30
                 worksheet.set_row(start_row, 30)
                 
                 headers = ['產品圖片', '型號', '中文品名', '10-15PCS', '16-29PCS', '30-59PCS', '備註']
@@ -379,52 +409,33 @@ with col_cart:
                 
                 for i, item in enumerate(st.session_state.cart):
                     worksheet.set_row(current_row, ROW_HEIGHT_EXCEL)
-                    
-                    # 畫格子邊框
                     worksheet.write_blank(current_row, 0, "", fmt_center)
 
-                    # 1. 圖片處理 (強制寬度 150px)
+                    # 【修正2】圖片強制放大處理
                     p_code = item.get('pic code_1', '')
                     if not p_code or str(p_code) == 'nan':
                         p_code = item.get('Item_No', '')
-                        
+                    
                     img_path = find_image_robust(p_code)
                     
                     if img_path:
-                        try:
-                            with Image.open(img_path) as im:
-                                orig_w, orig_h = im.size
-                                
-                                # 【關鍵修正】強制設定圖片目標寬度為 150px
-                                # 並根據這個寬度算出縮放比例
-                                target_image_width = 150
-                                
-                                scale = target_image_width / orig_w
-                                
-                                # 高度安全檢查：如果按此比例縮放，高度超過格子(200px)太多，則改用高度限制
-                                # 但一般寬版照片不會超過。為了排版整齊，我們以寬度為優先。
-                                final_w = orig_w * scale
-                                final_h = orig_h * scale
-                                
-                                if final_h > CELL_H_PX:
-                                    # 如果真的太高(直式照片)，才被迫縮小以適應高度
-                                    scale = (CELL_H_PX - 10) / orig_h
-                                    final_w = orig_w * scale
-                                    final_h = orig_h * scale
-                                
-                                # 置中計算 (格子寬約189 - 圖片寬150) / 2
-                                x_off = (CELL_W_PX - final_w) / 2
-                                y_off = (CELL_H_PX - final_h) / 2
-                                
-                                worksheet.insert_image(current_row, 0, img_path, {
-                                    'x_scale': scale, 
-                                    'y_scale': scale,
-                                    'x_offset': x_off, 
-                                    'y_offset': y_off,
-                                    'object_position': 1
-                                })
-                        except:
-                            worksheet.write(current_row, 0, "圖片錯誤", fmt_center)
+                        # 強制將圖片處理成接近格子大小 (180x180)，消除 DPI 影響
+                        # 我們設定最大寬高為 180 (略小於 190x200 的格子)
+                        img_buffer, final_w, final_h = process_image_for_excel(img_path, 180, 180)
+                        
+                        if img_buffer:
+                            # 計算置中 (格子寬約 190, 高 200)
+                            x_off = (CELL_W_PX - final_w) / 2
+                            y_off = (CELL_H_PX - final_h) / 2
+                            
+                            worksheet.insert_image(current_row, 0, "img.png", {
+                                'image_data': img_buffer,
+                                'x_offset': x_off, 
+                                'y_offset': y_off,
+                                'object_position': 1
+                            })
+                        else:
+                             worksheet.write(current_row, 0, "圖片錯誤", fmt_center)
                     else:
                         worksheet.write(current_row, 0, "無圖片", fmt_center)
 
