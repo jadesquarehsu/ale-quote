@@ -40,16 +40,15 @@ except:
 def load_data():
     try:
         df = pd.read_csv(SHEET_URL, encoding='utf-8')
-        # 資料清理：確保重要欄位是字串格式
+        # 資料清理
         if 'Item_No' in df.columns:
             df['Item_No'] = df['Item_No'].astype(str).str.strip()
         
-        # 預先處理圖片欄位
         for col in ['pic code_1', 'pic code_2']:
             if col in df.columns:
                 df[col] = df[col].astype(str).str.strip()
             else:
-                df[col] = "" # 如果沒這欄就補空
+                df[col] = "" 
                 
         return df
     except:
@@ -73,35 +72,28 @@ def calc_price(row, src_col, design, service, margin, rate):
     except:
         return 0.0
 
-# 找圖功能的強力邏輯 (自動忽略大小寫、自動補副檔名)
+# 找圖功能的強力邏輯
 def find_image_robust(filename):
     if not filename or str(filename).lower() == "nan" or str(filename).strip() == "":
         return None
     
     clean_name = str(filename).strip()
-    
-    # 嘗試分離主檔名 (例如 "A001.png" -> "A001")
     base_name = clean_name
     if "." in clean_name:
         base_name = clean_name.rsplit('.', 1)[0]
     
-    # 所有可能的檔名組合
     candidates = [
-        clean_name,                     # 原樣
-        f"{clean_name}.png",            # 加小寫 png
-        f"{clean_name}.PNG",            # 加大寫 PNG
-        f"{clean_name}.jpg",            # 加小寫 jpg
-        f"{clean_name}.JPG",            # 加大寫 JPG
-        f"{base_name}.png",             # 只有檔名 + png
-        f"{base_name}.PNG",             # 只有檔名 + PNG
-        f"{base_name}.jpg",
-        f"{base_name}.JPG"
+        clean_name,
+        f"{clean_name}.png", f"{clean_name}.PNG",
+        f"{clean_name}.jpg", f"{clean_name}.JPG",
+        f"{base_name}.png", f"{base_name}.PNG",
+        f"{base_name}.jpg", f"{base_name}.JPG"
     ]
     
     for c in candidates:
         path = f"images/{c}"
         if os.path.exists(path):
-            return path # 找到了！
+            return path
             
     return None
 
@@ -119,7 +111,7 @@ if df_raw is None:
 
 df_raw.columns = df_raw.columns.str.strip()
 
-# --- 5. 參數設定面板 ---
+# --- 5. 參數設定 ---
 st.sidebar.success("✅ 已解鎖")
 st.sidebar.markdown("---")
 st.sidebar.header("⚙️ 參數設定")
@@ -140,7 +132,7 @@ sel_cate = st.sidebar.selectbox("類型篩選", cate_opt)
 sel_gend = st.sidebar.selectbox("性別篩選", gend_opt)
 search_kw = st.sidebar.text_input("搜尋關鍵字")
 
-# --- 6. 執行計算與過濾 ---
+# --- 6. 執行計算 ---
 df = df_raw.copy()
 
 df['10-15PCS'] = df.apply(lambda r: calc_price(r, '10-59', 300, 100, m1, rate), axis=1)
@@ -156,7 +148,7 @@ if search_kw:
         df['Item_No'].str.contains(search_kw, na=False)
     ]
 
-# --- 7. 主畫面顯示 ---
+# --- 7. 主畫面 ---
 st.title("🛡️ ALÉ 代理商專業報價系統")
 
 if 'cart' not in st.session_state:
@@ -164,7 +156,7 @@ if 'cart' not in st.session_state:
 
 col_main, col_cart = st.columns([2, 1])
 
-# === 左側：搜尋結果 ===
+# === 左側 ===
 with col_main:
     st.subheader(f"📦 搜尋結果 ({len(df)} 筆)")
     if df.empty:
@@ -174,8 +166,7 @@ with col_main:
             gender_label = f"({row['Gender']})" if 'Gender' in row and pd.notna(row['Gender']) else ""
             with st.expander(f"➕ {row['Item_No']} {gender_label} - {row['Description_CH']}"):
                 
-                # --- 圖片顯示區塊 (使用新邏輯) ---
-                # 取得編號：優先用 pic code 欄位，沒有則用 Item_No
+                # --- 圖片顯示 (修正版: 改用 use_column_width) ---
                 code_1 = row['pic code_1'] if 'pic code_1' in row else row['Item_No']
                 code_2 = row['pic code_2'] if 'pic code_2' in row else None
                 
@@ -184,8 +175,9 @@ with col_main:
 
                 if path_front and path_back:
                     c1, c2 = st.columns(2)
-                    c1.image(path_front, caption="正面", use_container_width=True)
-                    c2.image(path_back, caption="背面", use_container_width=True)
+                    # 👇 關鍵修改：將 use_container_width 改回 use_column_width
+                    c1.image(path_front, caption="正面", use_column_width=True)
+                    c2.image(path_back, caption="背面", use_column_width=True)
                 elif path_front:
                     st.image(path_front, caption="正面", width=300)
                 elif path_back:
@@ -194,7 +186,6 @@ with col_main:
                     st.caption(f"🖼️ 無圖片 (嘗試搜尋: {code_1})")
                 # ------------------------------
 
-                # 顯示資訊
                 note = row['NOTE'] if pd.notna(row['NOTE']) else "無"
                 st.write(f"**備註：** {note}")
                 
@@ -203,14 +194,9 @@ with col_main:
                 c2.metric("16-29pcs", f"${row['16-29PCS']:,}")
                 c3.metric("30-59pcs", f"${row['30-59PCS']:,}")
                 
-                st.button(
-                    "加入報價單", 
-                    key=f"btn_{row['Item_No']}",
-                    on_click=add_to_cart_callback,
-                    args=(row.to_dict(),)
-                )
+                st.button("加入報價單", key=f"btn_{row['Item_No']}", on_click=add_to_cart_callback, args=(row.to_dict(),))
 
-# === 右側：報價清單 ===
+# === 右側 ===
 with col_cart:
     st.subheader(f"🛒 報價清單 ({len(st.session_state.cart)})")
     
@@ -220,9 +206,9 @@ with col_cart:
         display_cols = ['Item_No', 'Description_CH', '10-15PCS', '16-29PCS', '30-59PCS']
         valid_cols = [c for c in display_cols if c in cart_df.columns]
         
+        # 這裡也改一下比較保險
         st.dataframe(cart_df[valid_cols], use_container_width=True)
 
-        # 匯出 Excel 功能
         output = io.BytesIO()
         try:
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
