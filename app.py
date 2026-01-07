@@ -165,12 +165,10 @@ if search_kw:
 
 # --- 7. 主畫面顯示 ---
 
-if 'cart' not in st.session_state:
-    st.session_state.cart = []
-
-# Logo
+# === Logo 顯示區塊 ===
 logo_path_png = "images/logo-ale b.png"
 logo_path_svg = "images/logo-ale b.svg"
+
 final_logo_path = None
 if os.path.exists(logo_path_png):
     final_logo_path = logo_path_png
@@ -185,6 +183,9 @@ if final_logo_path:
 st.title("🛡️ 代理商專業報價系統")
 st.divider()
 
+if 'cart' not in st.session_state:
+    st.session_state.cart = []
+
 col_main, col_cart = st.columns([2, 1])
 
 # === 左側：搜尋結果 ===
@@ -198,6 +199,7 @@ with col_main:
             gender_label = f"({row['Gender']})" if 'Gender' in row and pd.notna(row['Gender']) else ""
             with st.expander(f"➕ {row['Item_No']} {gender_label} - {row['Description_CH']}"):
                 
+                # --- 圖片顯示 ---
                 code_1 = row['pic code_1'] if 'pic code_1' in row else row['Item_No']
                 code_2 = row['pic code_2'] if 'pic code_2' in row else None
                 
@@ -243,6 +245,7 @@ with col_cart:
                 workbook = writer.book
                 worksheet = workbook.add_worksheet('報價單')
                 
+                # 隱藏預設格線
                 worksheet.hide_gridlines(2)
                 
                 target_font = 'Noto Sans CJK TC' 
@@ -252,11 +255,11 @@ with col_cart:
                     'bold': True, 'font_size': 28, 'align': 'center', 'valign': 'vcenter',
                     'font_name': target_font
                 })
-                # 【修改】報價日期字體 12
                 fmt_date = workbook.add_format({
                     'bold': True, 'font_size': 12, 'align': 'right', 'valign': 'vcenter',
                     'font_name': target_font
                 })
+                # 客戶資訊
                 fmt_client_label = workbook.add_format({
                     'bold': True, 'font_size': 16, 'align': 'left', 'valign': 'vcenter',
                     'font_name': target_font
@@ -275,6 +278,7 @@ with col_cart:
                     'font_name': target_font
                 })
                 
+                # 表格內容字體 12
                 fmt_center = workbook.add_format({
                     'align': 'center', 'valign': 'vcenter', 'border': 1, 'text_wrap': True, 'font_size': 12,
                     'font_name': target_font
@@ -287,15 +291,17 @@ with col_cart:
                     'align': 'center', 'valign': 'vcenter', 'border': 1, 'num_format': '$#,##0', 'font_size': 12, 'bold': True,
                     'font_name': target_font
                 })
+                
                 fmt_footer = workbook.add_format({
                     'align': 'left', 'valign': 'top', 'text_wrap': True, 'font_size': 11,
                     'font_name': target_font
                 })
                 
-                # --- B. 設定欄寬與列高參數 (維持您要求的緊湊度) ---
+                # --- B. 設定欄寬與列高參數 ---
                 # A欄寬度 26 (約 185px)
                 COL_WIDTH_EXCEL = 26
-                COL_WIDTH_PIXELS = 185 
+                # 我們設定目標像素略大於計算值，確保撐滿
+                COL_WIDTH_PIXELS = 205 
                 
                 # 列高 150 (約 200px)
                 ROW_HEIGHT_EXCEL = 150
@@ -311,7 +317,7 @@ with col_cart:
                 
                 worksheet.set_row(0, 20) 
 
-                # 【修正1】Logo 垂直置中 (精算)
+                # Logo 垂直置中 (精算)
                 header_row_height = 100
                 worksheet.set_row(1, header_row_height) 
 
@@ -320,10 +326,11 @@ with col_cart:
                     try:
                         with Image.open(logo_file) as img:
                             w, h = img.size
-                            target_h = 70 # 設定 Logo 高度 70
+                            target_h = 70 # Logo 高度 70
                             scale = target_h / h
                             
                             # Row Height 100 (points) = 133 pixels
+                            # Logo Height 70 pixels
                             # Offset = (133 - 70) / 2 = 31.5 pixels
                             y_offset = 31 
 
@@ -334,6 +341,7 @@ with col_cart:
                     except:
                         pass
 
+                # 標題
                 worksheet.merge_range('B2:G2', 'ALÉ 訂製車衣報價單', fmt_title)
                 
                 # 報價日期
@@ -376,7 +384,7 @@ with col_cart:
                 
                 # --- D. 寫入表格 ---
                 start_row = 8
-                # 【修正3】標題列高度改為 30
+                # 標題列高度 30
                 worksheet.set_row(start_row, 30)
                 
                 headers = ['產品圖片', '型號', '中文品名', '10-15PCS', '16-29PCS', '30-59PCS', '備註']
@@ -386,12 +394,13 @@ with col_cart:
                 current_row = start_row + 1
                 
                 for i, item in enumerate(st.session_state.cart):
+                    # 設定這一列的高度
                     worksheet.set_row(current_row, ROW_HEIGHT_EXCEL)
                     
-                    # 畫格子邊框
+                    # 畫格子邊框 (修正格線消失)
                     worksheet.write_blank(current_row, 0, "", fmt_center)
 
-                    # 1. 圖片處理 (【修正2】100% 撐滿邏輯)
+                    # 1. 圖片處理 (強制填滿邏輯 - V18)
                     p_code = item.get('pic code_1', '')
                     if not p_code or str(p_code) == 'nan':
                         p_code = item.get('Item_No', '')
@@ -403,28 +412,38 @@ with col_cart:
                             with Image.open(img_path) as im:
                                 orig_w, orig_h = im.size
                                 
-                                # 目標尺寸：設定為格子的 100% 像素 (留 1px 邊距)
-                                target_w_px = COL_WIDTH_PIXELS - 1
-                                target_h_px = ROW_HEIGHT_PIXELS - 1
+                                # 目標：強制延伸圖片，讓它碰觸到格子的邊界
+                                # 我們設定目標像素略小於格子，確保不重疊但最大化
+                                # 這裡的目標尺寸是基於 Excel 欄寬 26 和列高 150 的推算值
+                                # 為了確保"撐滿"，我們取一個稍大的目標值
+                                target_w_px = 205
+                                target_h_px = 200
                                 
-                                # 強制計算縮放比例
-                                scale_x = target_w_px / orig_w
-                                scale_y = target_h_px / orig_h
+                                # 計算縮放比：我們需要算出的 scale 是能讓圖片"至少"一邊達到目標
+                                # 自動延伸算法：min ratio 確保圖片完整放入，但我們基於"略大"的目標來算
+                                ratio_w = target_w_px / orig_w
+                                ratio_h = target_h_px / orig_h
                                 
-                                # 取最小值，確保整張圖都在格子內，但會頂到其中一邊
-                                scale = min(scale_x, scale_y)
+                                scale = min(ratio_w, ratio_h)
                                 
                                 final_w = orig_w * scale
                                 final_h = orig_h * scale
                                 
-                                # 計算置中偏移
-                                x_off = (COL_WIDTH_PIXELS - final_w) / 2
-                                y_off = (ROW_HEIGHT_PIXELS - final_h) / 2
+                                # 置中
+                                # Excel 實際格寬可能會因系統字體有微小差異，我們用 185 (保守格寬) 來算置中
+                                # 如果圖片比 185 大 (因為我們用了 205 做目標)，x_off 會是負的，這沒關係，
+                                # xlsxwriter 會處理，或者稍微超出邊框一點點反而好看。
+                                # 這裡我們用回歸的 185 來算偏移，確保視覺中心
+                                display_cell_w = 185
+                                display_cell_h = 200
+                                
+                                x_off = (display_cell_w - final_w) / 2
+                                y_off = (display_cell_h - final_h) / 2
                                 
                                 worksheet.insert_image(current_row, 0, img_path, {
                                     'x_scale': scale, 
                                     'y_scale': scale,
-                                    'x_offset': x_off, 
+                                    'x_offset': x_off + 5, # 微調向右一點
                                     'y_offset': y_off,
                                     'object_position': 1
                                 })
