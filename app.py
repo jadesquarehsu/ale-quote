@@ -245,7 +245,7 @@ with col_cart:
                 workbook = writer.book
                 worksheet = workbook.add_worksheet('報價單')
                 
-                # 隱藏預設格線
+                # 隱藏預設格線 (讓它看起來像正式文件)
                 worksheet.hide_gridlines(2)
                 
                 target_font = 'Noto Sans CJK TC' 
@@ -259,7 +259,6 @@ with col_cart:
                     'bold': True, 'font_size': 12, 'align': 'right', 'valign': 'vcenter',
                     'font_name': target_font
                 })
-                # 客戶資訊
                 fmt_client_label = workbook.add_format({
                     'bold': True, 'font_size': 16, 'align': 'left', 'valign': 'vcenter',
                     'font_name': target_font
@@ -272,14 +271,12 @@ with col_cart:
                     'align': 'left', 'valign': 'vcenter', 'font_name': target_font, 'font_size': 16
                 })
 
-                # 表格標題
                 fmt_header = workbook.add_format({
                     'bold': True, 'font_color': 'white', 'bg_color': '#2C3E50',
                     'align': 'center', 'valign': 'vcenter', 'border': 1,
                     'font_name': target_font
                 })
                 
-                # 表格內容 (字體 12)
                 fmt_center = workbook.add_format({
                     'align': 'center', 'valign': 'vcenter', 'border': 1, 'text_wrap': True, 'font_size': 12,
                     'font_name': target_font
@@ -292,20 +289,19 @@ with col_cart:
                     'align': 'center', 'valign': 'vcenter', 'border': 1, 'num_format': '$#,##0', 'font_size': 12, 'bold': True,
                     'font_name': target_font
                 })
-                
                 fmt_footer = workbook.add_format({
                     'align': 'left', 'valign': 'top', 'text_wrap': True, 'font_size': 11,
                     'font_name': target_font
                 })
                 
-                # --- B. 設定欄寬與列高參數 (遵守要求：緊湊版) ---
-                # A欄寬度 26 (約 190px)
-                COL_WIDTH_EXCEL = 26
-                COL_WIDTH_PIXELS = 190
+                # --- B. 設定欄寬與列高參數 (甜蜜點：不高不矮) ---
+                # A欄寬度 40 (約 290px)
+                COL_WIDTH_EXCEL = 40
+                COL_WIDTH_PIXELS = 285
                 
-                # 列高 150 (約 200px)
-                ROW_HEIGHT_EXCEL = 150
-                ROW_HEIGHT_PIXELS = 200
+                # 列高 180 (約 240px) -> 比 150 高一點，讓照片有空間展示
+                ROW_HEIGHT_EXCEL = 180
+                ROW_HEIGHT_PIXELS = 240
                 
                 worksheet.set_column('A:A', COL_WIDTH_EXCEL) 
                 worksheet.set_column('B:B', 20)
@@ -317,7 +313,7 @@ with col_cart:
                 
                 worksheet.set_row(0, 20) 
 
-                # Logo 垂直置中 (修正版)
+                # 【修正1】Logo 放大且垂直置中
                 header_row_height = 100
                 worksheet.set_row(1, header_row_height) 
 
@@ -326,13 +322,13 @@ with col_cart:
                     try:
                         with Image.open(logo_file) as img:
                             w, h = img.size
-                            target_h = 75 
+                            target_h = 80 # 設定為大尺寸 80
                             scale = target_h / h
                             
-                            # Excel Row Height 100 = 133 pixels
-                            # Logo Height = 75 pixels
-                            # Offset = (133 - 75) / 2 = 29 pixels
-                            y_offset = 29 
+                            # Row height 100 points = 133 pixels
+                            # Logo height 80 pixels
+                            # Offset = (133 - 80) / 2 = 26 pixels
+                            y_offset = 26 
 
                             worksheet.insert_image('A2', logo_file, {
                                 'x_scale': scale, 'y_scale': scale,
@@ -391,13 +387,12 @@ with col_cart:
                 current_row = start_row + 1
                 
                 for i, item in enumerate(st.session_state.cart):
-                    # 設定這一列的高度 (緊湊版)
                     worksheet.set_row(current_row, ROW_HEIGHT_EXCEL)
                     
-                    # 1. 強制寫入空白格並帶入格式 (修復格線消失問題)
+                    # 【修正2】畫格子邊框
                     worksheet.write_blank(current_row, 0, "", fmt_center)
 
-                    # 2. 圖片處理 (強制 1.1倍 撐滿，解決"過小"問題)
+                    # 1. 圖片處理 (強制 95% 滿版，解決圖片太小問題)
                     p_code = item.get('pic code_1', '')
                     if not p_code or str(p_code) == 'nan':
                         p_code = item.get('Item_No', '')
@@ -409,21 +404,24 @@ with col_cart:
                             with Image.open(img_path) as im:
                                 orig_w, orig_h = im.size
                                 
-                                # 目標尺寸 (撐滿格線 110%) -> 讓它稍微大一點，感覺更飽滿
-                                target_w = COL_WIDTH_PIXELS * 1.0
-                                target_h = ROW_HEIGHT_PIXELS * 1.0
+                                # 計算格子像素大小 (寬 285px, 高 240px)
+                                avail_w = COL_WIDTH_PIXELS
+                                avail_h = ROW_HEIGHT_PIXELS
                                 
-                                ratio_w = target_w / orig_w
-                                ratio_h = target_h / orig_h
+                                # 計算需要的縮放比來填滿 95%
+                                ratio_w = (avail_w * 0.95) / orig_w
+                                ratio_h = (avail_h * 0.95) / orig_h
                                 
+                                # 取小值以確保圖片完整放入
                                 scale = min(ratio_w, ratio_h)
                                 
+                                # 計算縮放後尺寸
                                 final_w = orig_w * scale
                                 final_h = orig_h * scale
                                 
                                 # 置中
-                                x_off = (COL_WIDTH_PIXELS - final_w) / 2
-                                y_off = (ROW_HEIGHT_PIXELS - final_h) / 2
+                                x_off = (avail_w - final_w) / 2
+                                y_off = (avail_h - final_h) / 2
                                 
                                 worksheet.insert_image(current_row, 0, img_path, {
                                     'x_scale': scale, 
@@ -437,7 +435,7 @@ with col_cart:
                     else:
                         worksheet.write(current_row, 0, "無圖片", fmt_center)
 
-                    # 3. 文字資料
+                    # 2. 文字資料
                     worksheet.write(current_row, 1, item.get('Item_No', ''), fmt_center)
                     worksheet.write(current_row, 2, item.get('Description_CH', ''), fmt_left)
                     
