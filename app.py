@@ -1,4 +1,3 @@
-python
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -461,5 +460,3 @@ with st.expander("🛠️ 系統診斷報告 (Debug)"):
         if has_png: st.success("✅ PNG Logo (logo-ale b.png) 存在")
     else:
         st.error("❌ 找不到 'images' 資料夾！")
-
-```
