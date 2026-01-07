@@ -52,6 +52,7 @@ def load_data():
         if 'Item_No' in df.columns:
             df['Item_No'] = df['Item_No'].astype(str).str.strip()
         
+        # 確保讀取 code_1 和 code_2
         for col in ['pic code_1', 'pic code_2']:
             if col in df.columns:
                 df[col] = df[col].astype(str).str.strip()
@@ -217,7 +218,7 @@ st.divider()
 
 col_main, col_cart = st.columns([2, 1])
 
-# === 左側：搜尋結果 ===
+# === 左側：搜尋結果 (修正：加入正面與背面圖片) ===
 with col_main:
     st.subheader(f"📦 搜尋結果 ({len(df)} 筆)")
     
@@ -228,11 +229,23 @@ with col_main:
             gender_label = f"({row['Gender']})" if 'Gender' in row and pd.notna(row['Gender']) else ""
             with st.expander(f"➕ {row['Item_No']} {gender_label} - {row['Description_CH']}"):
                 
+                # 讀取正面和背面代碼
                 code_1 = row['pic code_1'] if 'pic code_1' in row else row['Item_No']
-                path_front = find_image_robust(code_1)
+                code_2 = row['pic code_2'] if 'pic code_2' in row else None
                 
-                if path_front:
+                # 尋找圖片路徑
+                path_front = find_image_robust(code_1)
+                path_back = find_image_robust(code_2)
+
+                # 顯示邏輯：如果有兩張就並排，只有一張就單獨顯示
+                if path_front and path_back:
+                    c1, c2 = st.columns(2)
+                    c1.image(path_front, caption="正面", use_column_width=True)
+                    c2.image(path_back, caption="背面", use_column_width=True)
+                elif path_front:
                     st.image(path_front, caption="正面", width=300)
+                elif path_back:
+                    st.image(path_back, caption="背面", width=300)
                 else:
                     st.caption(f"🖼️ 無圖片 (嘗試搜尋: {code_1})")
                 
@@ -372,7 +385,6 @@ with col_cart:
             # 準備 Logo (轉為白底+Base64)
             logo_b64 = ""
             if os.path.exists("images/logo-ale b.png"):
-                # 使用 process_image 確保 Logo 也是白底且高品質
                 logo_buf, _, _ = process_image("images/logo-ale b.png", 500, 80)
                 if logo_buf:
                     logo_b64 = buffer_to_b64(logo_buf)
@@ -413,7 +425,6 @@ with col_cart:
                     </tr>
                 """
 
-            # 組合完整 HTML (移除縮排以避免 st.markdown 誤判)
             html_content = f"""
 <!DOCTYPE html>
 <html>
@@ -500,7 +511,6 @@ with col_cart:
 </body>
 </html>
 """
-            
             st.markdown(html_content, unsafe_allow_html=True)
 
         st.divider()
