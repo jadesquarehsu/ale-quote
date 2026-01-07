@@ -136,12 +136,10 @@ search_kw = st.sidebar.text_input("搜尋關鍵字")
 # --- 6. 執行計算與篩選 ---
 df = df_raw.copy()
 
-# 計算價格
 df['10-15PCS'] = df.apply(lambda r: calc_price(r, '10-59', 300, 100, m1, rate), axis=1)
 df['16-29PCS'] = df.apply(lambda r: calc_price(r, '10-59', 200, 62, m2, rate), axis=1)
 df['30-59PCS'] = df.apply(lambda r: calc_price(r, '10-59', 150, 33, m3, rate), axis=1)
 
-# 執行篩選
 if sel_line != "全部": df = df[df['Line_code'] == sel_line]
 if sel_cate != "全部": df = df[df['Category'] == sel_cate]
 if sel_gend != "全部": df = df[df['Gender'] == sel_gend]
@@ -242,9 +240,10 @@ with col_cart:
                     'bold': True, 'font_size': 20, 'align': 'center', 'valign': 'vcenter',
                     'font_name': target_font
                 })
-                fmt_info = workbook.add_format({
-                    'font_size': 11, 'align': 'center', 'valign': 'vcenter',
-                    'font_name': target_font
+                # 公司資訊移到頁尾，這裡定義一個小字體格式
+                fmt_info_small = workbook.add_format({
+                    'font_size': 9, 'align': 'left', 'valign': 'top', 'font_color': '#555555',
+                    'font_name': target_font, 'text_wrap': True
                 })
                 fmt_label = workbook.add_format({
                     'bold': True, 'font_size': 12, 'align': 'left', 'valign': 'vcenter',
@@ -259,7 +258,6 @@ with col_cart:
                     'align': 'center', 'valign': 'vcenter', 'border': 1, 'text_wrap': True, 'font_size': 11,
                     'font_name': target_font
                 })
-                # 產品名稱專用 (靠左)
                 fmt_left = workbook.add_format({
                     'align': 'left', 'valign': 'vcenter', 'border': 1, 'text_wrap': True, 'font_size': 11,
                     'font_name': target_font
@@ -274,11 +272,13 @@ with col_cart:
                 })
                 
                 # --- B. 設定欄寬與列高參數 ---
-                # A欄寬度增加到 45 (約 320px) 滿足 100psi 視覺需求
+                # A欄 (圖片欄) 寬度設定 (單位: Excel字元寬度)
+                # 45 約等於 320 像素
                 COL_WIDTH_EXCEL = 45
                 COL_WIDTH_PIXELS = 320 
                 
-                # 列高增加到 260
+                # 列高 (單位: Point)
+                # 260 points 約等於 346 像素
                 ROW_HEIGHT_EXCEL = 260
                 ROW_HEIGHT_PIXELS = 346
                 
@@ -290,8 +290,10 @@ with col_cart:
                 
                 # --- C. 寫入頁首 (Header) ---
                 
-                # [修正 1] 頂部留白：所有內容往下移一列 (Row 0 空著)
-                # Logo 插入位置改為 A2
+                # Row 0 (第一行): 留白
+                worksheet.set_row(0, 20) 
+
+                # 1. 插入 Logo (放在 A2)
                 logo_file = "images/logo-ale b.png"
                 if os.path.exists(logo_file):
                     try:
@@ -301,25 +303,22 @@ with col_cart:
                             scale = target_h / h
                             worksheet.insert_image('A2', logo_file, {
                                 'x_scale': scale, 'y_scale': scale,
-                                'x_offset': 10, 'y_offset': 5
+                                'x_offset': 5, 'y_offset': 5
                             })
                     except:
                         pass
 
-                # 標題與資訊 (改到 Row 2 和 Row 3)
-                worksheet.merge_range('A2:G2', 'ALÉ 訂製車衣報價單', fmt_title)
-                info_text = "禾宏文化資訊有限公司 | 聯絡人：徐郁芳 | TEL: 04-24369368 | Email: uma@hehong.com.tw"
-                worksheet.merge_range('A3:G3', info_text, fmt_info)
+                # 2. 大標題 (B2:G2) - 移除下方的公司資訊
+                worksheet.merge_range('B2:G2', 'ALÉ 訂製車衣報價單', fmt_title)
                 
-                # 客戶填寫區 (改到 Row 5 和 Row 6)
-                worksheet.write('A5', '隊名：__________________________________', fmt_label)
-                worksheet.write('C5', '聯絡人：____________________', fmt_label)
-                worksheet.write('A6', '電話：__________________________________', fmt_label)
-                worksheet.write('C6', '地址：___________________________________________', fmt_label)
+                # 3. 客戶填寫區 (往上移一點，放在 Row 4-5)
+                worksheet.write('A4', '隊名：__________________________________', fmt_label)
+                worksheet.write('C4', '聯絡人：____________________', fmt_label)
+                worksheet.write('A5', '電話：__________________________________', fmt_label)
+                worksheet.write('C5', '地址：___________________________________________', fmt_label)
                 
                 # --- D. 寫入表格 ---
-                # 表格從第 8 列開始 (Row 7)
-                start_row = 7
+                start_row = 6
                 headers = ['產品圖片', '型號', '中文品名', '10-15PCS', '16-29PCS', '30-59PCS', '備註']
                 for col_num, header in enumerate(headers):
                     worksheet.write(start_row, col_num, header, fmt_header)
@@ -327,10 +326,9 @@ with col_cart:
                 current_row = start_row + 1
                 
                 for i, item in enumerate(st.session_state.cart):
-                    # 設定這一列的高度
                     worksheet.set_row(current_row, ROW_HEIGHT_EXCEL)
                     
-                    # 1. 圖片處理
+                    # 1. 圖片處理 (極大化填滿邏輯)
                     p_code = item.get('pic code_1', '')
                     if not p_code or str(p_code) == 'nan':
                         p_code = item.get('Item_No', '')
@@ -342,15 +340,22 @@ with col_cart:
                             with Image.open(img_path) as im:
                                 orig_w, orig_h = im.size
                                 
-                                width_ratio = COL_WIDTH_PIXELS / orig_w
-                                height_ratio = ROW_HEIGHT_PIXELS / orig_h
+                                # 計算格子可用空間 (扣掉 10px 邊距)
+                                avail_w = COL_WIDTH_PIXELS - 10
+                                avail_h = ROW_HEIGHT_PIXELS - 10
                                 
-                                # [修正 2] 縮放比例：改為 0.95 (更滿版)
-                                scale = min(width_ratio, height_ratio) * 0.95
+                                # 強制最大化：計算寬和高的縮放比
+                                ratio_w = avail_w / orig_w
+                                ratio_h = avail_h / orig_h
                                 
+                                # 取較小的比例，確保整張圖塞進去
+                                scale = min(ratio_w, ratio_h)
+                                
+                                # 算出最終圖片尺寸
                                 final_w = orig_w * scale
                                 final_h = orig_h * scale
                                 
+                                # 精確計算置中偏移量
                                 x_off = (COL_WIDTH_PIXELS - final_w) / 2
                                 y_off = (ROW_HEIGHT_PIXELS - final_h) / 2
                                 
@@ -368,7 +373,7 @@ with col_cart:
 
                     # 2. 文字資料
                     worksheet.write(current_row, 1, item.get('Item_No', ''), fmt_center)
-                    worksheet.write(current_row, 2, item.get('Description_CH', ''), fmt_left) # 靠左
+                    worksheet.write(current_row, 2, item.get('Description_CH', ''), fmt_left)
                     
                     def get_price(key):
                         try: return float(item.get(key, 0))
@@ -387,6 +392,8 @@ with col_cart:
                 # --- E. 寫入頁尾 (Footer) ---
                 footer_row = current_row + 1
                 valid_date = (datetime.now() + timedelta(days=30)).strftime("%Y/%m/%d")
+                
+                # 條款內容
                 terms = (
                     f"▶ 報價已含 5% 營業稅\n"
                     f"▶ 報價有效期限：{valid_date} \n"
@@ -394,11 +401,13 @@ with col_cart:
                     f"【匯款資訊】\n"
                     f"銀行：彰化銀行 (代碼 009) 北屯分行\n"
                     f"帳號：4028-8601-6895-00\n"
-                    f"戶名：禾宏文化資訊有限公司"
+                    f"戶名：禾宏文化資訊有限公司\n\n"
+                    f"--------------------------------------------------\n"
+                    f"禾宏文化資訊有限公司 | 聯絡人：徐郁芳 | TEL: 04-24369368 | Email: uma@hehong.com.tw"
                 )
                 
-                # [修正 3] 強制加大頁尾高度，確保文字不被裁切
-                worksheet.set_row(footer_row, 160) # 設定為 160 (約 200px) 高度
+                # 加大頁尾高度以容納更多資訊
+                worksheet.set_row(footer_row, 220) 
                 worksheet.merge_range(footer_row, 0, footer_row, 6, terms, fmt_footer)
 
             excel_data = output.getvalue()
