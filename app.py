@@ -133,26 +133,9 @@ sel_cate = st.sidebar.selectbox("類型篩選", cate_opt)
 sel_gend = st.sidebar.selectbox("性別篩選", gend_opt)
 search_kw = st.sidebar.text_input("搜尋關鍵字")
 
-# --- 6. 執行計算 ---
-df = df_raw.copy()
-
-df['10-15PCS'] = df.apply(lambda r: calc_price(r, '10-59', 300, 100, m1, rate), axis=1)
-df['16-29PCS'] = df.apply(lambda r: calc_price(r, '10-59', 200, 62, m2, rate), axis=1)
-df['30-59PCS'] = df.apply(lambda r: calc_price(r, '10-59', 150, 33, m3, rate), axis=1)
-
-if sel_line != "全部": df = df[df['Line_code'] == sel_line]
-if sel_cate != "全部": df = df[df['Category'] == sel_cate]
-if sel_gend != "全部": df = df[df['Gender'] == sel_gend]
-if search_kw: 
-    df = df[
-        df['Description_CH'].str.contains(search_kw, na=False, case=False) | 
-        df['Item_No'].str.contains(search_kw, na=False)
-    ]
-
 # --- 7. 主畫面顯示 ---
 
-# === 新增: Logo 顯示區塊 (網頁版) ===
-# 優先找 PNG (logo-ale b.png)，如果沒有再找 SVG
+# === Logo 顯示區塊 (網頁版) ===
 logo_path_png = "images/logo-ale b.png"
 logo_path_svg = "images/logo-ale b.svg"
 
@@ -232,47 +215,61 @@ with col_cart:
                 workbook = writer.book
                 worksheet = workbook.add_worksheet('報價單')
                 
+                # 指定字體名稱
+                target_font = 'Noto Sans CJK TC' 
+                
                 # --- A. 定義格式 (Styles) ---
                 fmt_title = workbook.add_format({
-                    'bold': True, 'font_size': 20, 'align': 'center', 'valign': 'vcenter'
+                    'bold': True, 'font_size': 20, 'align': 'center', 'valign': 'vcenter',
+                    'font_name': target_font
                 })
                 fmt_info = workbook.add_format({
-                    'font_size': 11, 'align': 'center', 'valign': 'vcenter'
+                    'font_size': 11, 'align': 'center', 'valign': 'vcenter',
+                    'font_name': target_font
                 })
                 fmt_label = workbook.add_format({
-                    'bold': True, 'font_size': 12, 'align': 'left', 'valign': 'vcenter'
+                    'bold': True, 'font_size': 12, 'align': 'left', 'valign': 'vcenter',
+                    'font_name': target_font
                 })
                 fmt_header = workbook.add_format({
                     'bold': True, 'font_color': 'white', 'bg_color': '#2C3E50',
-                    'align': 'center', 'valign': 'vcenter', 'border': 1
+                    'align': 'center', 'valign': 'vcenter', 'border': 1,
+                    'font_name': target_font
                 })
                 fmt_center = workbook.add_format({
-                    'align': 'center', 'valign': 'vcenter', 'border': 1, 'text_wrap': True, 'font_size': 11
+                    'align': 'center', 'valign': 'vcenter', 'border': 1, 'text_wrap': True, 'font_size': 11,
+                    'font_name': target_font
                 })
                 fmt_currency = workbook.add_format({
-                    'align': 'center', 'valign': 'vcenter', 'border': 1, 'num_format': '$#,##0', 'font_size': 12, 'bold': True
+                    'align': 'center', 'valign': 'vcenter', 'border': 1, 'num_format': '$#,##0', 'font_size': 12, 'bold': True,
+                    'font_name': target_font
                 })
                 fmt_footer = workbook.add_format({
-                    'align': 'left', 'valign': 'top', 'text_wrap': True, 'font_size': 11
+                    'align': 'left', 'valign': 'top', 'text_wrap': True, 'font_size': 11,
+                    'font_name': target_font
                 })
                 
-                # --- B. 設定欄寬 ---
-                worksheet.set_column('A:A', 30) # 圖片欄
-                worksheet.set_column('B:B', 20) # 型號
-                worksheet.set_column('C:C', 35) # 品名
-                worksheet.set_column('D:F', 15) # 價格
-                worksheet.set_column('G:G', 20) # 備註
+                # --- B. 設定欄寬與列高參數 ---
+                COL_WIDTH_EXCEL = 32
+                COL_WIDTH_PIXELS = 230 
+                
+                ROW_HEIGHT_EXCEL = 200
+                ROW_HEIGHT_PIXELS = 266
+                
+                worksheet.set_column('A:A', COL_WIDTH_EXCEL) # 圖片欄
+                worksheet.set_column('B:B', 20)
+                worksheet.set_column('C:C', 35)
+                worksheet.set_column('D:F', 15)
+                worksheet.set_column('G:G', 20)
                 
                 # --- C. 寫入頁首 (Header) ---
                 
-                # 1. 插入 Logo (使用 PNG 檔)
-                # xlsxwriter 插入圖片是浮動的，我們把它放在 A1 位置
+                # 1. 插入 Logo
                 logo_file = "images/logo-ale b.png"
                 if os.path.exists(logo_file):
                     try:
                         with Image.open(logo_file) as img:
                             w, h = img.size
-                            # 計算縮放比例，讓高度大約 55 像素 (配合標題列高度)
                             target_h = 55
                             scale = target_h / h
                             worksheet.insert_image('A1', logo_file, {
@@ -280,7 +277,7 @@ with col_cart:
                                 'x_offset': 10, 'y_offset': 5
                             })
                     except:
-                        pass # 讀取失敗就算了
+                        pass
 
                 # 2. 標題與資訊
                 worksheet.merge_range('A1:G1', 'ALÉ 訂製車衣報價單', fmt_title)
@@ -298,15 +295,13 @@ with col_cart:
                 for col_num, header in enumerate(headers):
                     worksheet.write(start_row, col_num, header, fmt_header)
                 
-                # 設定圖片目標大小 (加大尺寸)
-                TARGET_SIZE = 280 
-                
                 current_row = start_row + 1
                 
                 for i, item in enumerate(st.session_state.cart):
-                    worksheet.set_row(current_row, 220)
+                    # 設定這一列的高度
+                    worksheet.set_row(current_row, ROW_HEIGHT_EXCEL)
                     
-                    # 1. 圖片處理
+                    # 1. 圖片處理 (修正：置中與等比例縮放)
                     p_code = item.get('pic code_1', '')
                     if not p_code or str(p_code) == 'nan':
                         p_code = item.get('Item_No', '')
@@ -317,14 +312,26 @@ with col_cart:
                         try:
                             with Image.open(img_path) as im:
                                 orig_w, orig_h = im.size
-                                x_scale = TARGET_SIZE / orig_w
-                                y_scale = TARGET_SIZE / orig_h
-                                final_scale = min(x_scale, y_scale)
+                                
+                                # 計算縮放比例
+                                width_ratio = COL_WIDTH_PIXELS / orig_w
+                                height_ratio = ROW_HEIGHT_PIXELS / orig_h
+                                
+                                # 取最小比例 * 0.9 (留邊)
+                                scale = min(width_ratio, height_ratio) * 0.9
+                                
+                                final_w = orig_w * scale
+                                final_h = orig_h * scale
+                                
+                                # 計算置中偏移
+                                x_off = (COL_WIDTH_PIXELS - final_w) / 2
+                                y_off = (ROW_HEIGHT_PIXELS - final_h) / 2
                                 
                                 worksheet.insert_image(current_row, 0, img_path, {
-                                    'x_scale': final_scale, 
-                                    'y_scale': final_scale,
-                                    'x_offset': 10, 'y_offset': 10,
+                                    'x_scale': scale, 
+                                    'y_scale': scale,
+                                    'x_offset': x_off, 
+                                    'y_offset': y_off,
                                     'object_position': 1
                                 })
                         except:
@@ -389,13 +396,7 @@ st.divider()
 with st.expander("🛠️ 系統診斷報告 (Debug)"):
     if os.path.exists("images"):
         st.success("✅ 'images' 資料夾存在")
-        # 檢查兩個 Logo 檔案
         has_png = os.path.exists("images/logo-ale b.png")
-        has_svg = os.path.exists("images/logo-ale b.svg")
-        
-        if has_png: st.success("✅ PNG Logo (logo-ale b.png) 存在 - 將用於 Excel")
-        else: st.warning("⚠️ 找不到 logo-ale b.png，Excel 報價單將不會顯示 Logo")
-        
-        if has_svg: st.success("✅ SVG Logo (logo-ale b.svg) 存在")
+        if has_png: st.success("✅ PNG Logo (logo-ale b.png) 存在")
     else:
         st.error("❌ 找不到 'images' 資料夾！")
