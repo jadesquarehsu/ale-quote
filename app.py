@@ -268,14 +268,14 @@ with col_cart:
                     'font_name': target_font
                 })
                 
-                # --- B. 設定欄寬與列高參數 (極大化設定) ---
-                # A欄寬度 45 (約 320px)
-                COL_WIDTH_EXCEL = 45
-                COL_WIDTH_PIXELS = 320 
+                # --- B. 設定欄寬與列高參數 (關鍵調整：變矮胖) ---
+                # A欄寬度 38 (約 270px)
+                COL_WIDTH_EXCEL = 38
+                COL_WIDTH_PIXELS = 270
                 
-                # 列高加大到 300 (約 400px)
-                ROW_HEIGHT_EXCEL = 300
-                ROW_HEIGHT_PIXELS = 400
+                # 列高縮小到 150 (約 200px) -> 讓格子變正方形一點，照片視覺會變大
+                ROW_HEIGHT_EXCEL = 150
+                ROW_HEIGHT_PIXELS = 200
                 
                 worksheet.set_column('A:A', COL_WIDTH_EXCEL) 
                 worksheet.set_column('B:B', 20)
@@ -283,43 +283,49 @@ with col_cart:
                 worksheet.set_column('D:F', 15)
                 worksheet.set_column('G:G', 20)
                 
-                # --- C. 寫入頁首 (Header) - 加入間隔 ---
+                # --- C. 寫入頁首 (Header) ---
                 
                 # Row 0: 頂部留白
                 worksheet.set_row(0, 20)
 
-                # Row 1: Logo 與 標題
+                # Row 1: Logo 獨立放大 (放在 A2)
                 logo_file = "images/logo-ale b.png"
                 if os.path.exists(logo_file):
                     try:
                         with Image.open(logo_file) as img:
                             w, h = img.size
-                            target_h = 55
+                            # [關鍵修改] Logo 放大: 高度設為 80
+                            target_h = 80
                             scale = target_h / h
-                            worksheet.insert_image('A1', logo_file, {
+                            worksheet.insert_image('A2', logo_file, {
                                 'x_scale': scale, 'y_scale': scale,
                                 'x_offset': 5, 'y_offset': 5
                             })
                     except:
                         pass
-
-                worksheet.merge_range('B1:G1', 'ALÉ 訂製車衣報價單', fmt_title)
                 
-                # Row 2: 【關鍵修改】插入空白間隔列
-                worksheet.set_row(2, 30) 
-                
-                # Row 3-4: 客戶填寫區 (往下移)
-                worksheet.write('A3', '隊名：__________________________________', fmt_label)
-                worksheet.write('C3', '聯絡人：____________________', fmt_label)
-                worksheet.write('A4', '電話：__________________________________', fmt_label)
-                worksheet.write('C4', '地址：___________________________________________', fmt_label)
+                # 設定 Row 1 高度，讓 Logo 有空間
+                worksheet.set_row(1, 70)
 
-                # Row 5: 表格前再留白一列
-                worksheet.set_row(5, 20)
+                # 標題 (往右移，不跟 Logo 擠)
+                worksheet.merge_range('B2:G2', 'ALÉ 訂製車衣報價單', fmt_title)
+                
+                # Row 2, 3: [關鍵修改] 插入兩行空白，把隊伍資訊往下推
+                worksheet.set_row(2, 20) 
+                worksheet.set_row(3, 20)
+                
+                # Row 4-5: 客戶填寫區
+                worksheet.write('A5', '隊名：__________________________________', fmt_label)
+                worksheet.write('C5', '聯絡人：____________________', fmt_label)
+                worksheet.write('A6', '電話：__________________________________', fmt_label)
+                worksheet.write('C6', '地址：___________________________________________', fmt_label)
+
+                # Row 6: 表格前再留白
+                worksheet.set_row(6, 20)
                 
                 # --- D. 寫入表格 ---
-                # 表格從第 7 列開始 (Row 6)
-                start_row = 6
+                # 表格從第 8 列開始 (Row 7)
+                start_row = 7
                 headers = ['產品圖片', '型號', '中文品名', '10-15PCS', '16-29PCS', '30-59PCS', '備註']
                 for col_num, header in enumerate(headers):
                     worksheet.write(start_row, col_num, header, fmt_header)
@@ -327,10 +333,10 @@ with col_cart:
                 current_row = start_row + 1
                 
                 for i, item in enumerate(st.session_state.cart):
-                    # 設定這一列的高度 (極大化)
+                    # 設定這一列的高度 (縮小了，讓照片看起來更滿)
                     worksheet.set_row(current_row, ROW_HEIGHT_EXCEL)
                     
-                    # 1. 圖片處理 (撐滿格線邏輯)
+                    # 1. 圖片處理 (撐滿邏輯)
                     p_code = item.get('pic code_1', '')
                     if not p_code or str(p_code) == 'nan':
                         p_code = item.get('Item_No', '')
@@ -342,14 +348,13 @@ with col_cart:
                             with Image.open(img_path) as im:
                                 orig_w, orig_h = im.size
                                 
-                                # 【關鍵修改】可用空間幾乎不留邊距 (只減 2px)
+                                # 幾乎不留邊距 (-2px)
                                 avail_w = COL_WIDTH_PIXELS - 2
                                 avail_h = ROW_HEIGHT_PIXELS - 2
                                 
                                 ratio_w = avail_w / orig_w
                                 ratio_h = avail_h / orig_h
                                 
-                                # 取較小的比例，確保整張圖塞進去，但會撐到最大
                                 scale = min(ratio_w, ratio_h)
                                 
                                 final_w = orig_w * scale
@@ -401,7 +406,7 @@ with col_cart:
                     f"帳號：4028-8601-6895-00\n"
                     f"戶名：禾宏文化資訊有限公司\n\n"
                     f"--------------------------------------------------\n"
-                    f"廠商：禾宏文化資訊有限公司 | 聯絡人：徐郁芳 | TEL: 04-24369368 ext 19 | Email: uma@hehong.com.tw"
+                    f"禾宏文化資訊有限公司 | 聯絡人：徐郁芳 | TEL: 04-24369368 ext19 | Email: uma@hehong.com.tw"
                 )
                 
                 worksheet.set_row(footer_row, 220) 
