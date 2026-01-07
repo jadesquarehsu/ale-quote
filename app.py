@@ -7,7 +7,7 @@ import io
 from PIL import Image
 from datetime import datetime, timedelta
 
-# --- 1. 網頁基本設定 (修正 Favicon) ---
+# --- 1. 網頁基本設定 ---
 # 檢查是否存在 hh.svg，若有則使用，否則用預設
 favicon = "images/hh.svg" if os.path.exists("images/hh.svg") else "🚴"
 
@@ -119,7 +119,7 @@ if df_raw is None:
 
 df_raw.columns = df_raw.columns.str.strip()
 
-# --- 5. 參數設定 (左側選單) ---
+# --- 5. 參數設定 ---
 st.sidebar.success("✅ 已解鎖")
 st.sidebar.markdown("---")
 
@@ -247,33 +247,31 @@ with col_cart:
                 workbook = writer.book
                 worksheet = workbook.add_worksheet('報價單')
                 
+                # 【功能新增】隱藏格線 (2 = 隱藏列印與畫面格線)
+                worksheet.hide_gridlines(2)
+                
                 target_font = 'Noto Sans CJK TC' 
                 
                 # --- A. 定義格式 (Styles) ---
                 
-                # 1. 標題: Size 28
                 fmt_title = workbook.add_format({
                     'bold': True, 'font_size': 28, 'align': 'center', 'valign': 'vcenter',
                     'font_name': target_font
                 })
-                
-                # 2. 報價日期
                 fmt_date = workbook.add_format({
                     'bold': True, 'font_size': 12, 'align': 'right', 'valign': 'vcenter',
                     'font_name': target_font
                 })
-                
-                # 3. 客戶資訊標籤 (隊名等): Bold, Size 16
+                # 客戶資訊標籤: Bold, Size 16
                 fmt_client_label = workbook.add_format({
                     'bold': True, 'font_size': 16, 'align': 'left', 'valign': 'vcenter',
                     'font_name': target_font
                 })
-                # 4. 客戶資訊內容: Regular, Size 16
+                # 客戶資訊內容: Regular, Size 16
                 fmt_client_val = workbook.add_format({
                     'bold': False, 'font_size': 16, 'align': 'left', 'valign': 'vcenter',
                     'font_name': target_font
                 })
-                # 用於寫入 rich string 後的底層格式
                 fmt_client_base = workbook.add_format({
                     'align': 'left', 'valign': 'vcenter', 'font_name': target_font, 'font_size': 16
                 })
@@ -284,31 +282,34 @@ with col_cart:
                     'align': 'center', 'valign': 'vcenter', 'border': 1,
                     'font_name': target_font
                 })
+                
+                # 【修正】表格內容字體放大為 12
                 fmt_center = workbook.add_format({
-                    'align': 'center', 'valign': 'vcenter', 'border': 1, 'text_wrap': True, 'font_size': 11,
+                    'align': 'center', 'valign': 'vcenter', 'border': 1, 'text_wrap': True, 'font_size': 12,
                     'font_name': target_font
                 })
                 fmt_left = workbook.add_format({
-                    'align': 'left', 'valign': 'vcenter', 'border': 1, 'text_wrap': True, 'font_size': 11,
+                    'align': 'left', 'valign': 'vcenter', 'border': 1, 'text_wrap': True, 'font_size': 12,
                     'font_name': target_font
                 })
                 fmt_currency = workbook.add_format({
                     'align': 'center', 'valign': 'vcenter', 'border': 1, 'num_format': '$#,##0', 'font_size': 12, 'bold': True,
                     'font_name': target_font
                 })
+                
                 fmt_footer = workbook.add_format({
                     'align': 'left', 'valign': 'top', 'text_wrap': True, 'font_size': 11,
                     'font_name': target_font
                 })
                 
-                # --- B. 設定欄寬與列高參數 (修正：緊湊版) ---
-                # 格子設為 38寬 x 160高 (約 270px x 210px) 
-                # 這樣格子比較扁平，不會太高，照片撐滿後視覺會覺得比較「滿」
-                COL_WIDTH_EXCEL = 38
-                COL_WIDTH_PIXELS = 270 
+                # --- B. 設定欄寬與列高參數 (正方形大格子) ---
+                # A欄寬度 44 (約 315px)
+                COL_WIDTH_EXCEL = 44
+                COL_WIDTH_PIXELS = 315
                 
-                ROW_HEIGHT_EXCEL = 160
-                ROW_HEIGHT_PIXELS = 213
+                # 列高 235 (約 315px) -> 形成完美的正方形
+                ROW_HEIGHT_EXCEL = 235
+                ROW_HEIGHT_PIXELS = 315
                 
                 worksheet.set_column('A:A', COL_WIDTH_EXCEL) 
                 worksheet.set_column('B:B', 20)
@@ -318,10 +319,9 @@ with col_cart:
                 
                 # --- C. 寫入頁首 (Header) ---
                 
-                worksheet.set_row(0, 20) # 頂部留白
+                worksheet.set_row(0, 20) 
 
-                # 【修正】Logo 垂直置中
-                # 標題列高度設為 100，Logo 設為 75
+                # Logo 垂直置中
                 header_row_height = 100
                 worksheet.set_row(1, header_row_height) 
 
@@ -330,11 +330,9 @@ with col_cart:
                     try:
                         with Image.open(logo_file) as img:
                             w, h = img.size
-                            target_h = 75 # Logo 高度
+                            target_h = 75 
                             scale = target_h / h
                             
-                            # 垂直置中公式: (列高px - 圖片高px) / 2
-                            # Excel height 100 約為 133px
                             row_h_px = header_row_height * 1.33
                             logo_h_px = target_h
                             y_offset = (row_h_px - logo_h_px) / 2
@@ -356,35 +354,30 @@ with col_cart:
                 # 空白行
                 worksheet.set_row(3, 10)
                 
-                # 【新功能】使用 write_rich_string 混合字體 (粗體標籤 + 細體內容)
-                # 若無輸入，則顯示底線
+                # 客戶資訊 (Rich Text)
                 t_team = client_team if client_team else "________________________"
                 t_contact = client_contact if client_contact else "____________"
                 t_phone = client_phone if client_phone else "________________________"
                 t_addr = client_address if client_address else "_________________________________"
 
-                # 寫入隊名 (A5)
                 worksheet.write_rich_string('A5',
                     fmt_client_label, "隊名：",
                     fmt_client_val, t_team,
                     fmt_client_base
                 )
-                # 寫入聯絡人 (C5)
                 worksheet.write_rich_string('C5',
                     fmt_client_label, "聯絡人：",
                     fmt_client_val, t_contact,
                     fmt_client_base
                 )
                 
-                worksheet.set_row(5, 30) # 增加一點行高給大字體
+                worksheet.set_row(5, 30)
 
-                # 寫入電話 (A7)
                 worksheet.write_rich_string('A7',
                     fmt_client_label, "電話：",
                     fmt_client_val, t_phone,
                     fmt_client_base
                 )
-                # 寫入地址 (C7)
                 worksheet.write_rich_string('C7',
                     fmt_client_label, "地址：",
                     fmt_client_val, t_addr,
@@ -402,10 +395,10 @@ with col_cart:
                 current_row = start_row + 1
                 
                 for i, item in enumerate(st.session_state.cart):
-                    # 設定這一列的高度 (緊湊版 160)
+                    # 設定這一列的高度 (正方形大格)
                     worksheet.set_row(current_row, ROW_HEIGHT_EXCEL)
                     
-                    # 1. 圖片處理 (強制撐滿)
+                    # 1. 圖片處理 (Pixel-Based Logic 重寫版)
                     p_code = item.get('pic code_1', '')
                     if not p_code or str(p_code) == 'nan':
                         p_code = item.get('Item_No', '')
@@ -417,19 +410,20 @@ with col_cart:
                             with Image.open(img_path) as im:
                                 orig_w, orig_h = im.size
                                 
-                                # 設定目標尺寸 (撐滿格線 98%)
+                                # 目標尺寸 (撐滿 98%)
                                 target_w = COL_WIDTH_PIXELS * 0.98
                                 target_h = ROW_HEIGHT_PIXELS * 0.98
                                 
                                 ratio_w = target_w / orig_w
                                 ratio_h = target_h / orig_h
                                 
+                                # 取最小比例
                                 scale = min(ratio_w, ratio_h)
                                 
                                 final_w = orig_w * scale
                                 final_h = orig_h * scale
                                 
-                                # 絕對置中
+                                # 置中
                                 x_off = (COL_WIDTH_PIXELS - final_w) / 2
                                 y_off = (ROW_HEIGHT_PIXELS - final_h) / 2
                                 
