@@ -4,10 +4,11 @@ import numpy as np
 from urllib.parse import quote
 import os
 import io
-from PIL import Image # 用來讀取圖片尺寸，進行完美縮放
+from PIL import Image
+from datetime import datetime, timedelta
 
 # --- 1. 網頁基本設定 ---
-st.set_page_config(page_title="ALÉ 專業報價系統", layout="wide")
+st.set_page_config(page_title="ALÉ 專業報價系統", page_icon="🚴", layout="wide")
 
 # ==========================================
 # 🔐 安全密碼鎖
@@ -148,15 +149,33 @@ if search_kw:
         df['Item_No'].str.contains(search_kw, na=False)
     ]
 
-# --- 7. 主畫面 ---
-st.title("🛡️ ALÉ 代理商專業報價系統")
+# --- 7. 主畫面顯示 ---
+
+# === 新增: Logo 顯示區塊 (網頁版) ===
+# 優先找 PNG (logo-ale b.png)，如果沒有再找 SVG
+logo_path_png = "images/logo-ale b.png"
+logo_path_svg = "images/logo-ale b.svg"
+
+final_logo_path = None
+if os.path.exists(logo_path_png):
+    final_logo_path = logo_path_png
+elif os.path.exists(logo_path_svg):
+    final_logo_path = logo_path_svg
+
+if final_logo_path:
+    c_logo, c_dummy = st.columns([1, 6])
+    with c_logo:
+        st.image(final_logo_path, width=200)
+
+st.title("🛡️ 代理商專業報價系統")
+st.divider()
 
 if 'cart' not in st.session_state:
     st.session_state.cart = []
 
 col_main, col_cart = st.columns([2, 1])
 
-# === 左側 ===
+# === 左側：搜尋結果 ===
 with col_main:
     st.subheader(f"📦 搜尋結果 ({len(df)} 筆)")
     if df.empty:
@@ -213,44 +232,81 @@ with col_cart:
                 workbook = writer.book
                 worksheet = workbook.add_worksheet('報價單')
                 
-                # --- 定義美化格式 ---
-                # 標題列格式：深藍底、白字、加粗、置中
+                # --- A. 定義格式 (Styles) ---
+                fmt_title = workbook.add_format({
+                    'bold': True, 'font_size': 20, 'align': 'center', 'valign': 'vcenter'
+                })
+                fmt_info = workbook.add_format({
+                    'font_size': 11, 'align': 'center', 'valign': 'vcenter'
+                })
+                fmt_label = workbook.add_format({
+                    'bold': True, 'font_size': 12, 'align': 'left', 'valign': 'vcenter'
+                })
                 fmt_header = workbook.add_format({
                     'bold': True, 'font_color': 'white', 'bg_color': '#2C3E50',
                     'align': 'center', 'valign': 'vcenter', 'border': 1
                 })
-                # 一般文字格式：置中、邊框
                 fmt_center = workbook.add_format({
-                    'align': 'center', 'valign': 'vcenter', 'border': 1, 'text_wrap': True
+                    'align': 'center', 'valign': 'vcenter', 'border': 1, 'text_wrap': True, 'font_size': 11
                 })
-                # 金額格式：金錢符號、無小數點
                 fmt_currency = workbook.add_format({
-                    'align': 'center', 'valign': 'vcenter', 'border': 1, 'num_format': '$#,##0'
+                    'align': 'center', 'valign': 'vcenter', 'border': 1, 'num_format': '$#,##0', 'font_size': 12, 'bold': True
+                })
+                fmt_footer = workbook.add_format({
+                    'align': 'left', 'valign': 'top', 'text_wrap': True, 'font_size': 11
                 })
                 
-                # --- 設定欄寬 ---
-                worksheet.set_column('A:A', 18) # 圖片欄 (寬一點)
+                # --- B. 設定欄寬 ---
+                worksheet.set_column('A:A', 30) # 圖片欄
                 worksheet.set_column('B:B', 20) # 型號
-                worksheet.set_column('C:C', 35) # 品名 (最寬)
-                worksheet.set_column('D:F', 15) # 價格欄位
+                worksheet.set_column('C:C', 35) # 品名
+                worksheet.set_column('D:F', 15) # 價格
                 worksheet.set_column('G:G', 20) # 備註
                 
-                # --- 寫入標題列 ---
+                # --- C. 寫入頁首 (Header) ---
+                
+                # 1. 插入 Logo (使用 PNG 檔)
+                # xlsxwriter 插入圖片是浮動的，我們把它放在 A1 位置
+                logo_file = "images/logo-ale b.png"
+                if os.path.exists(logo_file):
+                    try:
+                        with Image.open(logo_file) as img:
+                            w, h = img.size
+                            # 計算縮放比例，讓高度大約 55 像素 (配合標題列高度)
+                            target_h = 55
+                            scale = target_h / h
+                            worksheet.insert_image('A1', logo_file, {
+                                'x_scale': scale, 'y_scale': scale,
+                                'x_offset': 10, 'y_offset': 5
+                            })
+                    except:
+                        pass # 讀取失敗就算了
+
+                # 2. 標題與資訊
+                worksheet.merge_range('A1:G1', 'ALÉ 訂製車衣報價單', fmt_title)
+                info_text = "禾宏文化資訊有限公司 | 聯絡人：徐郁芳 | TEL: 04-24369368 | Email: uma@hehong.com.tw"
+                worksheet.merge_range('A2:G2', info_text, fmt_info)
+                
+                worksheet.write('A4', '隊名：__________________________________', fmt_label)
+                worksheet.write('C4', '聯絡人：____________________', fmt_label)
+                worksheet.write('A5', '電話：__________________________________', fmt_label)
+                worksheet.write('C5', '地址：___________________________________________', fmt_label)
+                
+                # --- D. 寫入表格 ---
+                start_row = 6
                 headers = ['產品圖片', '型號', '中文品名', '10-15PCS', '16-29PCS', '30-59PCS', '備註']
                 for col_num, header in enumerate(headers):
-                    worksheet.write(0, col_num, header, fmt_header)
+                    worksheet.write(start_row, col_num, header, fmt_header)
                 
-                # --- 逐筆寫入資料與圖片 ---
-                # 設定圖片目標大小 (像素)
-                TARGET_SIZE = 110 
+                # 設定圖片目標大小 (加大尺寸)
+                TARGET_SIZE = 280 
+                
+                current_row = start_row + 1
                 
                 for i, item in enumerate(st.session_state.cart):
-                    row_num = i + 1
-                    # 設定列高 (為了放圖片，設高一點，單位是 points)
-                    worksheet.set_row(row_num, 90)
+                    worksheet.set_row(current_row, 220)
                     
-                    # 1. 處理圖片插入
-                    # 優先找正面圖，沒有則找 Item_No
+                    # 1. 圖片處理
                     p_code = item.get('pic code_1', '')
                     if not p_code or str(p_code) == 'nan':
                         p_code = item.get('Item_No', '')
@@ -259,48 +315,61 @@ with col_cart:
                     
                     if img_path:
                         try:
-                            # 讀取圖片原始大小來計算縮放比例
                             with Image.open(img_path) as im:
                                 orig_w, orig_h = im.size
-                                # 計算縮放比例，讓圖片塞進 110x110 的框框內
                                 x_scale = TARGET_SIZE / orig_w
                                 y_scale = TARGET_SIZE / orig_h
-                                final_scale = min(x_scale, y_scale) # 維持長寬比
+                                final_scale = min(x_scale, y_scale)
                                 
-                                worksheet.insert_image(row_num, 0, img_path, {
+                                worksheet.insert_image(current_row, 0, img_path, {
                                     'x_scale': final_scale, 
                                     'y_scale': final_scale,
-                                    'x_offset': 5, 'y_offset': 5, # 留一點邊距
-                                    'object_position': 1 # 隨儲存格移動
+                                    'x_offset': 10, 'y_offset': 10,
+                                    'object_position': 1
                                 })
                         except:
-                            worksheet.write(row_num, 0, "圖片錯誤", fmt_center)
+                            worksheet.write(current_row, 0, "圖片錯誤", fmt_center)
                     else:
-                        worksheet.write(row_num, 0, "無圖片", fmt_center)
+                        worksheet.write(current_row, 0, "無圖片", fmt_center)
 
-                    # 2. 寫入文字資料
-                    worksheet.write(row_num, 1, item.get('Item_No', ''), fmt_center)
-                    worksheet.write(row_num, 2, item.get('Description_CH', ''), fmt_center)
+                    # 2. 文字資料
+                    worksheet.write(current_row, 1, item.get('Item_No', ''), fmt_center)
+                    worksheet.write(current_row, 2, item.get('Description_CH', ''), fmt_center)
                     
-                    # 3. 寫入價格 (確保是數字，否則會變文字無法加總)
                     def get_price(key):
                         try: return float(item.get(key, 0))
                         except: return 0
                         
-                    worksheet.write(row_num, 3, get_price('10-15PCS'), fmt_currency)
-                    worksheet.write(row_num, 4, get_price('16-29PCS'), fmt_currency)
-                    worksheet.write(row_num, 5, get_price('30-59PCS'), fmt_currency)
+                    worksheet.write(current_row, 3, get_price('10-15PCS'), fmt_currency)
+                    worksheet.write(current_row, 4, get_price('16-29PCS'), fmt_currency)
+                    worksheet.write(current_row, 5, get_price('30-59PCS'), fmt_currency)
                     
                     note_txt = item.get('NOTE', '')
                     if pd.isna(note_txt): note_txt = ""
-                    worksheet.write(row_num, 6, str(note_txt), fmt_center)
+                    worksheet.write(current_row, 6, str(note_txt), fmt_center)
+                    
+                    current_row += 1
+
+                # --- E. 寫入頁尾 (Footer) ---
+                footer_row = current_row + 1
+                valid_date = (datetime.now() + timedelta(days=30)).strftime("%Y/%m/%d")
+                terms = (
+                    f"▶ 報價已含 5% 營業稅\n"
+                    f"▶ 報價有效期限：{valid_date} (報價日 + 1個月)\n"
+                    f"▶ 提供尺寸套量，預付套量押金 NT 5,000 元，退回套量後押金會退還或是轉作訂製訂金。\n\n"
+                    f"【匯款資訊】\n"
+                    f"銀行：彰化銀行 (代碼 009) 北屯分行\n"
+                    f"帳號：4028-8601-6895-00\n"
+                    f"戶名：禾宏文化資訊有限公司"
+                )
+                worksheet.merge_range(footer_row, 0, footer_row + 6, 6, terms, fmt_footer)
 
             excel_data = output.getvalue()
 
             st.download_button(
-                label="📥 下載 Excel 報價單 (含圖片)",
+                label="📥 下載 Excel 報價單",
                 data=excel_data,
-                file_name="ALE_Quote_With_Images.xlsx",
+                file_name="ALE_Quote.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
         except Exception as e:
@@ -317,8 +386,16 @@ with col_cart:
 # 🛑 系統診斷區
 # ==========================================
 st.divider()
-with st.expander("🛠️ 系統診斷報告"):
+with st.expander("🛠️ 系統診斷報告 (Debug)"):
     if os.path.exists("images"):
-        st.success("✅ 'images' 資料夾存在！")
+        st.success("✅ 'images' 資料夾存在")
+        # 檢查兩個 Logo 檔案
+        has_png = os.path.exists("images/logo-ale b.png")
+        has_svg = os.path.exists("images/logo-ale b.svg")
+        
+        if has_png: st.success("✅ PNG Logo (logo-ale b.png) 存在 - 將用於 Excel")
+        else: st.warning("⚠️ 找不到 logo-ale b.png，Excel 報價單將不會顯示 Logo")
+        
+        if has_svg: st.success("✅ SVG Logo (logo-ale b.svg) 存在")
     else:
         st.error("❌ 找不到 'images' 資料夾！")
