@@ -8,7 +8,6 @@ from PIL import Image
 from datetime import datetime, timedelta
 
 # --- 1. 網頁基本設定 ---
-# 檢查是否存在 hh.svg，若有則使用，否則用預設
 favicon = "images/hh.svg" if os.path.exists("images/hh.svg") else "🚴"
 
 st.set_page_config(
@@ -123,7 +122,6 @@ df_raw.columns = df_raw.columns.str.strip()
 st.sidebar.success("✅ 已解鎖")
 st.sidebar.markdown("---")
 
-# 客戶資訊輸入區
 st.sidebar.header("📝 客戶資訊")
 client_team = st.sidebar.text_input("隊名")
 client_contact = st.sidebar.text_input("聯絡人")
@@ -167,7 +165,7 @@ if search_kw:
 
 # --- 7. 主畫面顯示 ---
 
-# === Logo 顯示區塊 (網頁版) ===
+# === Logo 顯示區塊 ===
 logo_path_png = "images/logo-ale b.png"
 logo_path_svg = "images/logo-ale b.svg"
 
@@ -247,12 +245,11 @@ with col_cart:
                 workbook = writer.book
                 worksheet = workbook.add_worksheet('報價單')
                 
-                # 【功能新增】隱藏格線 (2 = 隱藏列印與畫面格線)
                 worksheet.hide_gridlines(2)
                 
                 target_font = 'Noto Sans CJK TC' 
                 
-                # --- A. 定義格式 (Styles) ---
+                # --- A. 定義格式 ---
                 
                 fmt_title = workbook.add_format({
                     'bold': True, 'font_size': 28, 'align': 'center', 'valign': 'vcenter',
@@ -262,12 +259,10 @@ with col_cart:
                     'bold': True, 'font_size': 12, 'align': 'right', 'valign': 'vcenter',
                     'font_name': target_font
                 })
-                # 客戶資訊標籤: Bold, Size 16
                 fmt_client_label = workbook.add_format({
                     'bold': True, 'font_size': 16, 'align': 'left', 'valign': 'vcenter',
                     'font_name': target_font
                 })
-                # 客戶資訊內容: Regular, Size 16
                 fmt_client_val = workbook.add_format({
                     'bold': False, 'font_size': 16, 'align': 'left', 'valign': 'vcenter',
                     'font_name': target_font
@@ -276,14 +271,12 @@ with col_cart:
                     'align': 'left', 'valign': 'vcenter', 'font_name': target_font, 'font_size': 16
                 })
 
-                # 表格標題
                 fmt_header = workbook.add_format({
                     'bold': True, 'font_color': 'white', 'bg_color': '#2C3E50',
                     'align': 'center', 'valign': 'vcenter', 'border': 1,
                     'font_name': target_font
                 })
                 
-                # 【修正】表格內容字體放大為 12
                 fmt_center = workbook.add_format({
                     'align': 'center', 'valign': 'vcenter', 'border': 1, 'text_wrap': True, 'font_size': 12,
                     'font_name': target_font
@@ -302,14 +295,14 @@ with col_cart:
                     'font_name': target_font
                 })
                 
-                # --- B. 設定欄寬與列高參數 (正方形大格子) ---
-                # A欄寬度 44 (約 315px)
-                COL_WIDTH_EXCEL = 44
-                COL_WIDTH_PIXELS = 315
+                # --- B. 設定欄寬與列高參數 (緊湊版) ---
+                # A欄寬度 26 (約 190px)
+                COL_WIDTH_EXCEL = 26
+                COL_WIDTH_PIXELS = 190 
                 
-                # 列高 235 (約 315px) -> 形成完美的正方形
-                ROW_HEIGHT_EXCEL = 235
-                ROW_HEIGHT_PIXELS = 315
+                # 列高 150 (約 200px)
+                ROW_HEIGHT_EXCEL = 150
+                ROW_HEIGHT_PIXELS = 200
                 
                 worksheet.set_column('A:A', COL_WIDTH_EXCEL) 
                 worksheet.set_column('B:B', 20)
@@ -322,7 +315,8 @@ with col_cart:
                 worksheet.set_row(0, 20) 
 
                 # Logo 垂直置中
-                header_row_height = 100
+                # 標題列高度 90
+                header_row_height = 90
                 worksheet.set_row(1, header_row_height) 
 
                 logo_file = "images/logo-ale b.png"
@@ -330,7 +324,7 @@ with col_cart:
                     try:
                         with Image.open(logo_file) as img:
                             w, h = img.size
-                            target_h = 75 
+                            target_h = 65 # Logo 高度
                             scale = target_h / h
                             
                             row_h_px = header_row_height * 1.33
@@ -339,19 +333,18 @@ with col_cart:
 
                             worksheet.insert_image('A2', logo_file, {
                                 'x_scale': scale, 'y_scale': scale,
-                                'x_offset': 15, 'y_offset': y_offset 
+                                'x_offset': 10, 'y_offset': y_offset 
                             })
                     except:
                         pass
 
-                # 標題 (B2:G2) - Size 28
+                # 標題
                 worksheet.merge_range('B2:G2', 'ALÉ 訂製車衣報價單', fmt_title)
                 
                 # 報價日期
                 quote_date_str = datetime.now().strftime("%Y/%m/%d")
                 worksheet.merge_range('A3:G3', f"報價日期：{quote_date_str}", fmt_date)
                 
-                # 空白行
                 worksheet.set_row(3, 10)
                 
                 # 客戶資訊 (Rich Text)
@@ -395,10 +388,10 @@ with col_cart:
                 current_row = start_row + 1
                 
                 for i, item in enumerate(st.session_state.cart):
-                    # 設定這一列的高度 (正方形大格)
+                    # 設定這一列的高度 (緊湊版)
                     worksheet.set_row(current_row, ROW_HEIGHT_EXCEL)
                     
-                    # 1. 圖片處理 (Pixel-Based Logic 重寫版)
+                    # 1. 圖片處理 (強制撐滿)
                     p_code = item.get('pic code_1', '')
                     if not p_code or str(p_code) == 'nan':
                         p_code = item.get('Item_No', '')
@@ -417,7 +410,6 @@ with col_cart:
                                 ratio_w = target_w / orig_w
                                 ratio_h = target_h / orig_h
                                 
-                                # 取最小比例
                                 scale = min(ratio_w, ratio_h)
                                 
                                 final_w = orig_w * scale
