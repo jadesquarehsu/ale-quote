@@ -4,6 +4,7 @@ import numpy as np
 from urllib.parse import quote
 import os
 import io
+import base64
 from PIL import Image
 from datetime import datetime, timedelta
 
@@ -104,38 +105,32 @@ def find_image_robust(filename):
             
     return None
 
-# 【關鍵修正 V21】圖片預處理：強制大小 + 透明轉白底
+# 圖片轉 Base64 (給 HTML 用)
+def img_to_b64(path):
+    try:
+        with open(path, "rb") as img_file:
+            return base64.b64encode(img_file.read()).decode()
+    except:
+        return ""
+
+# Excel 圖片預處理 (白底 + 強制尺寸)
 def process_image_for_excel(image_path, max_width, max_height):
     try:
         with Image.open(image_path) as img:
-            # 1. 處理透明背景 -> 轉為白底
-            # 檢查是否為 RGBA (有透明度) 或 P 模式且有透明設定
             if img.mode in ('RGBA', 'LA') or (img.mode == 'P' and 'transparency' in img.info):
-                # 確保是 RGBA 模式以便提取 alpha 通道
                 img = img.convert('RGBA')
-                # 建立一個純白背景 (RGB 模式)
                 background = Image.new('RGB', img.size, (255, 255, 255))
-                # 將原圖貼到白底上，使用 alpha 通道作為遮罩
-                # 這樣透明的地方就會露出白底
                 background.paste(img, mask=img.split()[3])
                 img = background
             elif img.mode != 'RGB':
-                # 如果不是透明圖，但也不是 RGB (例如 CMYK 或灰階)，轉為 RGB
                 img = img.convert('RGB')
             
-            # 到這裡，img 已經是一張純 RGB 的白底圖片了
-
-            # 2. 計算縮放比例 (保持長寬比)
             img.thumbnail((max_width, max_height), Image.Resampling.LANCZOS)
-            
-            # 3. 存入記憶體
             output = io.BytesIO()
             img.save(output, format='PNG')
             output.seek(0)
-            
             return output, img.width, img.height
-    except Exception as e:
-        # print(f"Image processing error: {e}") # Debug 用
+    except Exception:
         return None, 0, 0
 
 # 回呼函數
@@ -232,19 +227,10 @@ with col_main:
             with st.expander(f"➕ {row['Item_No']} {gender_label} - {row['Description_CH']}"):
                 
                 code_1 = row['pic code_1'] if 'pic code_1' in row else row['Item_No']
-                code_2 = row['pic code_2'] if 'pic code_2' in row else None
-                
                 path_front = find_image_robust(code_1)
-                path_back = find_image_robust(code_2)
-
-                if path_front and path_back:
-                    c1, c2 = st.columns(2)
-                    c1.image(path_front, caption="正面", use_column_width=True)
-                    c2.image(path_back, caption="背面", use_column_width=True)
-                elif path_front:
+                
+                if path_front:
                     st.image(path_front, caption="正面", width=300)
-                elif path_back:
-                    st.image(path_back, caption="背面", width=300)
                 else:
                     st.caption(f"🖼️ 無圖片 (嘗試搜尋: {code_1})")
                 
@@ -258,7 +244,7 @@ with col_main:
                 
                 st.button("加入報價單", key=f"btn_{row['Item_No']}", on_click=add_to_cart_callback, args=(row.to_dict(),))
 
-# === 右側：進階 Excel 匯出功能 ===
+# === 右側：報價單區 ===
 with col_cart:
     st.subheader(f"🛒 報價清單 ({len(st.session_state.cart)})")
     
@@ -269,68 +255,31 @@ with col_cart:
         valid_cols = [c for c in display_cols if c in cart_df.columns]
         st.dataframe(cart_df[valid_cols], use_container_width=True)
 
-        # 準備匯出 Excel
+        # -------------------------------------------
+        # 功能 1：Excel 匯出 (您的完美版本 V21)
+        # -------------------------------------------
         output = io.BytesIO()
         try:
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                 workbook = writer.book
                 worksheet = workbook.add_worksheet('報價單')
-                
-                # 隱藏預設格線
                 worksheet.hide_gridlines(2)
-                
                 target_font = 'Noto Sans CJK TC' 
                 
-                # --- A. 定義格式 ---
-                fmt_title = workbook.add_format({
-                    'bold': True, 'font_size': 28, 'align': 'center', 'valign': 'vcenter',
-                    'font_name': target_font
-                })
-                fmt_date = workbook.add_format({
-                    'bold': True, 'font_size': 12, 'align': 'right', 'valign': 'vcenter',
-                    'font_name': target_font
-                })
-                fmt_client_label = workbook.add_format({
-                    'bold': True, 'font_size': 16, 'align': 'left', 'valign': 'vcenter',
-                    'font_name': target_font
-                })
-                fmt_client_val = workbook.add_format({
-                    'bold': False, 'font_size': 16, 'align': 'left', 'valign': 'vcenter',
-                    'font_name': target_font
-                })
-                fmt_client_base = workbook.add_format({
-                    'align': 'left', 'valign': 'vcenter', 'font_name': target_font, 'font_size': 16
-                })
-
-                fmt_header = workbook.add_format({
-                    'bold': True, 'font_color': 'white', 'bg_color': '#2C3E50',
-                    'align': 'center', 'valign': 'vcenter', 'border': 1,
-                    'font_name': target_font
-                })
+                # ... (格式定義同 V21) ...
+                fmt_title = workbook.add_format({'bold': True, 'font_size': 28, 'align': 'center', 'valign': 'vcenter', 'font_name': target_font})
+                fmt_date = workbook.add_format({'bold': True, 'font_size': 12, 'align': 'right', 'valign': 'vcenter', 'font_name': target_font})
+                fmt_client_label = workbook.add_format({'bold': True, 'font_size': 16, 'align': 'left', 'valign': 'vcenter', 'font_name': target_font})
+                fmt_client_val = workbook.add_format({'bold': False, 'font_size': 16, 'align': 'left', 'valign': 'vcenter', 'font_name': target_font})
+                fmt_client_base = workbook.add_format({'align': 'left', 'valign': 'vcenter', 'font_name': target_font, 'font_size': 16})
+                fmt_header = workbook.add_format({'bold': True, 'font_color': 'white', 'bg_color': '#2C3E50', 'align': 'center', 'valign': 'vcenter', 'border': 1, 'font_name': target_font})
+                fmt_center = workbook.add_format({'align': 'center', 'valign': 'vcenter', 'border': 1, 'text_wrap': True, 'font_size': 12, 'font_name': target_font})
+                fmt_left = workbook.add_format({'align': 'left', 'valign': 'vcenter', 'border': 1, 'text_wrap': True, 'font_size': 12, 'font_name': target_font})
+                fmt_currency = workbook.add_format({'align': 'center', 'valign': 'vcenter', 'border': 1, 'num_format': '$#,##0', 'font_size': 12, 'bold': True, 'font_name': target_font})
+                fmt_footer = workbook.add_format({'align': 'left', 'valign': 'top', 'text_wrap': True, 'font_size': 11, 'font_name': target_font})
                 
-                fmt_center = workbook.add_format({
-                    'align': 'center', 'valign': 'vcenter', 'border': 1, 'text_wrap': True, 'font_size': 12,
-                    'font_name': target_font
-                })
-                fmt_left = workbook.add_format({
-                    'align': 'left', 'valign': 'vcenter', 'border': 1, 'text_wrap': True, 'font_size': 12,
-                    'font_name': target_font
-                })
-                fmt_currency = workbook.add_format({
-                    'align': 'center', 'valign': 'vcenter', 'border': 1, 'num_format': '$#,##0', 'font_size': 12, 'bold': True,
-                    'font_name': target_font
-                })
-                fmt_footer = workbook.add_format({
-                    'align': 'left', 'valign': 'top', 'text_wrap': True, 'font_size': 11,
-                    'font_name': target_font
-                })
-                
-                # --- B. 設定欄寬與列高參數 ---
-                COL_WIDTH_EXCEL = 26
-                CELL_W_PX = 190
-                
-                ROW_HEIGHT_EXCEL = 150
-                CELL_H_PX = 200
+                COL_WIDTH_EXCEL, CELL_W_PX = 26, 190
+                ROW_HEIGHT_EXCEL, CELL_H_PX = 150, 200
                 
                 worksheet.set_column('A:A', COL_WIDTH_EXCEL) 
                 worksheet.set_column('B:B', 20)
@@ -338,157 +287,208 @@ with col_cart:
                 worksheet.set_column('D:F', 15)
                 worksheet.set_column('G:G', 20)
                 
-                # --- C. 寫入頁首 (Header) ---
-                
+                # Header Logic (同 V21)
                 worksheet.set_row(0, 20) 
-
                 header_row_height = 100
                 worksheet.set_row(1, header_row_height) 
-
                 logo_file = "images/logo-ale b.png"
                 if os.path.exists(logo_file):
-                    # Logo 也套用白底處理，確保乾淨
                     logo_target_h = 80
                     logo_img_buffer, w, h = process_image_for_excel(logo_file, 500, logo_target_h)
-                    
                     if logo_img_buffer:
-                        # 計算置中: (133 - 實際高度) / 2
                         y_offset = (133 - h) / 2 
+                        worksheet.insert_image('A2', logo_file, {'image_data': logo_img_buffer, 'x_offset': 10, 'y_offset': y_offset})
 
-                        worksheet.insert_image('A2', logo_file, {
-                            'image_data': logo_img_buffer,
-                            'x_offset': 10, 
-                            'y_offset': y_offset 
-                        })
-
-                # 標題
                 worksheet.merge_range('B2:G2', 'ALÉ 訂製車衣報價單', fmt_title)
-                
-                # 報價日期
                 quote_date_str = datetime.now().strftime("%Y/%m/%d")
                 worksheet.merge_range('A3:G3', f"報價日期：{quote_date_str}", fmt_date)
-                
                 worksheet.set_row(3, 10)
                 
-                # 客戶資訊
                 t_team = client_team if client_team else "________________________"
                 t_contact = client_contact if client_contact else "____________"
                 t_phone = client_phone if client_phone else "________________________"
                 t_addr = client_address if client_address else "_________________________________"
 
-                worksheet.write_rich_string('A5',
-                    fmt_client_label, "隊名：",
-                    fmt_client_val, t_team,
-                    fmt_client_base
-                )
-                worksheet.write_rich_string('C5',
-                    fmt_client_label, "聯絡人：",
-                    fmt_client_val, t_contact,
-                    fmt_client_base
-                )
-                
+                worksheet.write_rich_string('A5', fmt_client_label, "隊名：", fmt_client_val, t_team, fmt_client_base)
+                worksheet.write_rich_string('C5', fmt_client_label, "聯絡人：", fmt_client_val, t_contact, fmt_client_base)
                 worksheet.set_row(5, 30)
-
-                worksheet.write_rich_string('A7',
-                    fmt_client_label, "電話：",
-                    fmt_client_val, t_phone,
-                    fmt_client_base
-                )
-                worksheet.write_rich_string('C7',
-                    fmt_client_label, "地址：",
-                    fmt_client_val, t_addr,
-                    fmt_client_base
-                )
-
+                worksheet.write_rich_string('A7', fmt_client_label, "電話：", fmt_client_val, t_phone, fmt_client_base)
+                worksheet.write_rich_string('C7', fmt_client_label, "地址：", fmt_client_val, t_addr, fmt_client_base)
                 worksheet.set_row(7, 20)
                 
-                # --- D. 寫入表格 ---
                 start_row = 8
                 worksheet.set_row(start_row, 30)
-                
                 headers = ['產品圖片', '型號', '中文品名', '10-15PCS', '16-29PCS', '30-59PCS', '備註']
                 for col_num, header in enumerate(headers):
                     worksheet.write(start_row, col_num, header, fmt_header)
                 
                 current_row = start_row + 1
-                
                 for i, item in enumerate(st.session_state.cart):
                     worksheet.set_row(current_row, ROW_HEIGHT_EXCEL)
                     worksheet.write_blank(current_row, 0, "", fmt_center)
-
                     p_code = item.get('pic code_1', '')
-                    if not p_code or str(p_code) == 'nan':
-                        p_code = item.get('Item_No', '')
-                    
+                    if not p_code or str(p_code) == 'nan': p_code = item.get('Item_No', '')
                     img_path = find_image_robust(p_code)
-                    
                     if img_path:
-                        # 使用新的白底處理函數，強制尺寸約 180x180
-                        img_buffer, final_w, final_h = process_image_for_excel(img_path, 180, 180)
-                        
+                        img_buffer, final_w, final_h = process_image_for_excel(img_path, 180, 180) # 強制尺寸
                         if img_buffer:
-                            # 計算置中
                             x_off = (CELL_W_PX - final_w) / 2
                             y_off = (CELL_H_PX - final_h) / 2
-                            
-                            worksheet.insert_image(current_row, 0, "img.png", {
-                                'image_data': img_buffer,
-                                'x_offset': x_off, 
-                                'y_offset': y_off,
-                                'object_position': 1
-                            })
-                        else:
-                             worksheet.write(current_row, 0, "圖片錯誤", fmt_center)
-                    else:
-                        worksheet.write(current_row, 0, "無圖片", fmt_center)
+                            worksheet.insert_image(current_row, 0, "img.png", {'image_data': img_buffer, 'x_offset': x_off, 'y_offset': y_off, 'object_position': 1})
+                        else: worksheet.write(current_row, 0, "圖片錯誤", fmt_center)
+                    else: worksheet.write(current_row, 0, "無圖片", fmt_center)
 
-                    # 2. 文字資料
                     worksheet.write(current_row, 1, item.get('Item_No', ''), fmt_center)
                     worksheet.write(current_row, 2, item.get('Description_CH', ''), fmt_left)
-                    
                     def get_price(key):
                         try: return float(item.get(key, 0))
                         except: return 0
-                        
                     worksheet.write(current_row, 3, get_price('10-15PCS'), fmt_currency)
                     worksheet.write(current_row, 4, get_price('16-29PCS'), fmt_currency)
                     worksheet.write(current_row, 5, get_price('30-59PCS'), fmt_currency)
-                    
                     note_txt = item.get('NOTE', '')
                     if pd.isna(note_txt): note_txt = ""
                     worksheet.write(current_row, 6, str(note_txt), fmt_center)
-                    
                     current_row += 1
 
-                # --- E. 寫入頁尾 (Footer) ---
                 footer_row = current_row + 1
                 valid_date = (datetime.now() + timedelta(days=30)).strftime("%Y/%m/%d")
-                
-                terms = (
-                    f"▶ 報價已含 5% 營業稅\n"
-                    f"▶ 報價有效期限：{valid_date}\n"
-                    f"▶ 提供尺寸套量，預付套量押金 NT 5,000 元，退回套量後押金會退還或是轉作訂製訂金。\n\n"
-                    f"【匯款資訊】\n"
-                    f"銀行：彰化銀行 (代碼 009) 北屯分行\n"
-                    f"帳號：4028-8601-6895-00\n"
-                    f"戶名：禾宏文化資訊有限公司\n\n"
-                    f"--------------------------------------------------\n"
-                    f"禾宏文化資訊有限公司 | 聯絡人：徐郁芳 | TEL: 04-24369368 ext19 | Email: uma@hehong.com.tw"
-                )
-                
+                terms = (f"▶ 報價已含 5% 營業稅\n▶ 報價有效期限：{valid_date}\n▶ 提供尺寸套量，預付套量押金 NT 5,000 元，退回套量後押金會退還或是轉作訂製訂金。\n\n【匯款資訊】\n銀行：彰化銀行 (代碼 009) 北屯分行\n帳號：4028-8601-6895-00\n戶名：禾宏文化資訊有限公司\n\n--------------------------------------------------\n禾宏文化資訊有限公司 | 聯絡人：徐郁芳 | TEL: 04-24369368 ext19 | Email: uma@hehong.com.tw")
                 worksheet.set_row(footer_row, 250) 
                 worksheet.merge_range(footer_row, 0, footer_row, 6, terms, fmt_footer)
 
             excel_data = output.getvalue()
-
-            st.download_button(
-                label="📥 下載 Excel 報價單",
-                data=excel_data,
-                file_name="ALE_Quote.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+            st.download_button(label="📥 下載 Excel 報價單 (最完美版)", data=excel_data, file_name="ALE_Quote.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        
         except Exception as e:
             st.error(f"Excel 匯出失敗: {e}")
+
+        # -------------------------------------------
+        # 功能 2：【新增】網頁列印預覽 (Print to PDF)
+        # -------------------------------------------
+        st.divider()
+        if st.button("📄 產生 PDF / 列印專用頁面"):
+            # 準備 Logo Base64
+            logo_b64 = img_to_b64("images/logo-ale b.png")
+            date_str = datetime.now().strftime("%Y/%m/%d")
+            valid_date = (datetime.now() + timedelta(days=30)).strftime("%Y/%m/%d")
+            
+            # 產生 HTML 字串
+            html_content = f"""
+            <html>
+            <head>
+                <style>
+                    body {{ font-family: 'Noto Sans TC', sans-serif; padding: 20px; }}
+                    .header-table {{ width: 100%; margin-bottom: 20px; }}
+                    .logo {{ height: 80px; }}
+                    .title {{ font-size: 28px; font-weight: bold; text-align: center; }}
+                    .date {{ text-align: right; font-weight: bold; font-size: 14px; }}
+                    .info-table {{ width: 100%; margin-bottom: 20px; font-size: 16px; }}
+                    .info-label {{ font-weight: bold; width: 80px; }}
+                    .quote-table {{ width: 100%; border-collapse: collapse; font-size: 12px; }}
+                    .quote-table th {{ background-color: #2C3E50; color: white; padding: 10px; border: 1px solid black; }}
+                    .quote-table td {{ border: 1px solid black; padding: 10px; text-align: center; vertical-align: middle; }}
+                    .product-img {{ width: 150px; height: auto; display: block; margin: 0 auto; }}
+                    .footer {{ margin-top: 20px; font-size: 12px; white-space: pre-line; }}
+                    @media print {{ 
+                        .no-print {{ display: none; }} 
+                        body {{ -webkit-print-color-adjust: exact; }}
+                    }}
+                </style>
+            </head>
+            <body>
+                <div class="no-print" style="margin-bottom: 20px; padding: 10px; background: #fff3cd; border: 1px solid #ffeeba;">
+                    ⚠️ 請按 <b>Ctrl + P</b> (Mac: Cmd + P) 開啟列印，選擇 <b>「另存為 PDF」</b>。
+                </div>
+                
+                <table class="header-table">
+                    <tr>
+                        <td width="20%"><img src="data:image/png;base64,{logo_b64}" class="logo"></td>
+                        <td class="title">ALÉ 訂製車衣報價單</td>
+                    </tr>
+                    <tr>
+                        <td></td>
+                        <td class="date">報價日期：{date_str}</td>
+                    </tr>
+                </table>
+
+                <table class="info-table">
+                    <tr>
+                        <td class="info-label">隊名：</td><td>{client_team}</td>
+                        <td class="info-label">聯絡人：</td><td>{client_contact}</td>
+                    </tr>
+                    <tr><td style="height: 10px;"></td></tr>
+                    <tr>
+                        <td class="info-label">電話：</td><td>{client_phone}</td>
+                        <td class="info-label">地址：</td><td>{client_address}</td>
+                    </tr>
+                </table>
+
+                <table class="quote-table">
+                    <thead>
+                        <tr>
+                            <th width="20%">產品圖片</th>
+                            <th width="15%">型號</th>
+                            <th width="25%">中文品名</th>
+                            <th width="10%">10-15PCS</th>
+                            <th width="10%">16-29PCS</th>
+                            <th width="10%">30-59PCS</th>
+                            <th width="10%">備註</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            """
+            
+            for item in st.session_state.cart:
+                # 處理圖片 Base64
+                p_code = item.get('pic code_1', '')
+                if not p_code or str(p_code) == 'nan': p_code = item.get('Item_No', '')
+                img_path = find_image_robust(p_code)
+                img_html = ""
+                if img_path:
+                    img_b64 = img_to_b64(img_path)
+                    img_html = f'<img src="data:image/png;base64,{img_b64}" class="product-img">'
+                
+                # 處理價格
+                def fmt_p(val):
+                    try: return f"${float(val):,.0f}"
+                    except: return "$0"
+
+                html_content += f"""
+                    <tr>
+                        <td>{img_html}</td>
+                        <td>{item.get('Item_No', '')}</td>
+                        <td style="text-align: left;">{item.get('Description_CH', '')}</td>
+                        <td>{fmt_p(item.get('10-15PCS'))}</td>
+                        <td>{fmt_p(item.get('16-29PCS'))}</td>
+                        <td>{fmt_p(item.get('30-59PCS'))}</td>
+                        <td>{item.get('NOTE', '') if pd.notna(item.get('NOTE')) else ''}</td>
+                    </tr>
+                """
+
+            html_content += f"""
+                    </tbody>
+                </table>
+
+                <div class="footer">
+                    ▶ 報價已含 5% 營業稅
+                    ▶ 報價有效期限：{valid_date}
+                    ▶ 提供尺寸套量，預付套量押金 NT 5,000 元，退回套量後押金會退還或是轉作訂製訂金。
+
+                    <b>【匯款資訊】</b>
+                    銀行：彰化銀行 (代碼 009) 北屯分行
+                    帳號：4028-8601-6895-00
+                    戶名：禾宏文化資訊有限公司
+
+                    --------------------------------------------------
+                    禾宏文化資訊有限公司 | 聯絡人：徐郁芳 | TEL: 04-24369368 ext19 | Email: uma@hehong.com.tw
+                </div>
+            </body>
+            </html>
+            """
+            
+            # 顯示 HTML 預覽
+            st.markdown(html_content, unsafe_allow_html=True)
 
         st.divider()
         if st.button("🗑️ 清空全部"):
@@ -497,14 +497,9 @@ with col_cart:
     else:
         st.info("尚未選取任何產品")
 
-# ==========================================
-# 🛑 系統診斷區
-# ==========================================
 st.divider()
-with st.expander("🛠️ 系統診斷報告 (Debug)"):
+with st.expander("🛠️ 系統診斷報告"):
     if os.path.exists("images"):
         st.success("✅ 'images' 資料夾存在")
-        has_png = os.path.exists("images/logo-ale b.png")
-        if has_png: st.success("✅ PNG Logo (logo-ale b.png) 存在")
     else:
         st.error("❌ 找不到 'images' 資料夾！")
