@@ -133,6 +133,24 @@ sel_cate = st.sidebar.selectbox("類型篩選", cate_opt)
 sel_gend = st.sidebar.selectbox("性別篩選", gend_opt)
 search_kw = st.sidebar.text_input("搜尋關鍵字")
 
+# --- 6. 執行計算與篩選 (修復重點：這段必須在 UI 顯示之前) ---
+df = df_raw.copy()
+
+# 計算價格
+df['10-15PCS'] = df.apply(lambda r: calc_price(r, '10-59', 300, 100, m1, rate), axis=1)
+df['16-29PCS'] = df.apply(lambda r: calc_price(r, '10-59', 200, 62, m2, rate), axis=1)
+df['30-59PCS'] = df.apply(lambda r: calc_price(r, '10-59', 150, 33, m3, rate), axis=1)
+
+# 執行篩選
+if sel_line != "全部": df = df[df['Line_code'] == sel_line]
+if sel_cate != "全部": df = df[df['Category'] == sel_cate]
+if sel_gend != "全部": df = df[df['Gender'] == sel_gend]
+if search_kw: 
+    df = df[
+        df['Description_CH'].str.contains(search_kw, na=False, case=False) | 
+        df['Item_No'].str.contains(search_kw, na=False)
+    ]
+
 # --- 7. 主畫面顯示 ---
 
 # === Logo 顯示區塊 (網頁版) ===
@@ -160,7 +178,9 @@ col_main, col_cart = st.columns([2, 1])
 
 # === 左側：搜尋結果 ===
 with col_main:
+    # 這裡使用 df 就不會報錯了，因為上面已經定義好 df
     st.subheader(f"📦 搜尋結果 ({len(df)} 筆)")
+    
     if df.empty:
         st.info("查無產品")
     else:
@@ -215,7 +235,7 @@ with col_cart:
                 workbook = writer.book
                 worksheet = workbook.add_worksheet('報價單')
                 
-                # 指定字體名稱
+                # 指定字體
                 target_font = 'Noto Sans CJK TC' 
                 
                 # --- A. 定義格式 (Styles) ---
@@ -236,14 +256,26 @@ with col_cart:
                     'align': 'center', 'valign': 'vcenter', 'border': 1,
                     'font_name': target_font
                 })
+                
+                # 一般內容 (置中)
                 fmt_center = workbook.add_format({
                     'align': 'center', 'valign': 'vcenter', 'border': 1, 'text_wrap': True, 'font_size': 11,
                     'font_name': target_font
                 })
+                
+                # 新增：內容 (靠左對齊) -> 專門給產品名稱用
+                fmt_left = workbook.add_format({
+                    'align': 'left', 'valign': 'vcenter', 'border': 1, 'text_wrap': True, 'font_size': 11,
+                    'font_name': target_font
+                })
+
+                # 金額
                 fmt_currency = workbook.add_format({
                     'align': 'center', 'valign': 'vcenter', 'border': 1, 'num_format': '$#,##0', 'font_size': 12, 'bold': True,
                     'font_name': target_font
                 })
+                
+                # 頁尾
                 fmt_footer = workbook.add_format({
                     'align': 'left', 'valign': 'top', 'text_wrap': True, 'font_size': 11,
                     'font_name': target_font
@@ -301,7 +333,7 @@ with col_cart:
                     # 設定這一列的高度
                     worksheet.set_row(current_row, ROW_HEIGHT_EXCEL)
                     
-                    # 1. 圖片處理 (修正：置中與等比例縮放)
+                    # 1. 圖片處理
                     p_code = item.get('pic code_1', '')
                     if not p_code or str(p_code) == 'nan':
                         p_code = item.get('Item_No', '')
@@ -313,17 +345,13 @@ with col_cart:
                             with Image.open(img_path) as im:
                                 orig_w, orig_h = im.size
                                 
-                                # 計算縮放比例
                                 width_ratio = COL_WIDTH_PIXELS / orig_w
                                 height_ratio = ROW_HEIGHT_PIXELS / orig_h
-                                
-                                # 取最小比例 * 0.9 (留邊)
                                 scale = min(width_ratio, height_ratio) * 0.9
                                 
                                 final_w = orig_w * scale
                                 final_h = orig_h * scale
                                 
-                                # 計算置中偏移
                                 x_off = (COL_WIDTH_PIXELS - final_w) / 2
                                 y_off = (ROW_HEIGHT_PIXELS - final_h) / 2
                                 
@@ -341,7 +369,8 @@ with col_cart:
 
                     # 2. 文字資料
                     worksheet.write(current_row, 1, item.get('Item_No', ''), fmt_center)
-                    worksheet.write(current_row, 2, item.get('Description_CH', ''), fmt_center)
+                    # 👇 關鍵修改：產品名稱改用 fmt_left (靠左對齊)
+                    worksheet.write(current_row, 2, item.get('Description_CH', ''), fmt_left)
                     
                     def get_price(key):
                         try: return float(item.get(key, 0))
