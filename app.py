@@ -158,12 +158,13 @@ client_address = st.sidebar.text_input("地址")
 
 st.sidebar.markdown("---")
 
-# 【新增】報價人資訊 (公司端)
+# 報價人資訊 (公司端)
 st.sidebar.header("💁‍♂️ 報價人資訊 (顯示於頁尾)")
-# 預設值為原本的寫死內容，方便直接使用，也可隨時修改
 quoter_name = st.sidebar.text_input("報價人姓名", value="徐郁芳")
 quoter_phone = st.sidebar.text_input("報價人電話", value="04-24369368 ext19")
 quoter_email = st.sidebar.text_input("報價人 Email", value="uma@hehong.com.tw")
+# 【新增】公司地址欄位
+quoter_address = st.sidebar.text_input("公司地址", value="台中市北屯區松竹五路二段426號")
 
 st.sidebar.markdown("---")
 st.sidebar.header("⚙️ 參數設定")
@@ -223,7 +224,7 @@ st.divider()
 
 col_main, col_cart = st.columns([2, 1])
 
-# === 左側：搜尋結果 (含正面+背面圖) ===
+# === 左側：搜尋結果 ===
 with col_main:
     st.subheader(f"📦 搜尋結果 ({len(df)} 筆)")
     
@@ -370,7 +371,7 @@ with col_cart:
                 footer_row = current_row + 1
                 valid_date = (datetime.now() + timedelta(days=30)).strftime("%Y/%m/%d")
                 
-                # 【修改】頁尾動態化：使用輸入變數
+                # 【修改】頁尾動態化：加入公司地址，並分行排版
                 terms = (
                     f"▶ 報價已含 5% 營業稅\n"
                     f"▶ 報價有效期限：{valid_date}\n"
@@ -380,7 +381,8 @@ with col_cart:
                     f"帳號：4028-8601-6895-00\n"
                     f"戶名：禾宏文化資訊有限公司\n\n"
                     f"--------------------------------------------------\n"
-                    f"禾宏文化資訊有限公司 | 聯絡人：{quoter_name} | TEL: {quoter_phone} | Email: {quoter_email}"
+                    f"禾宏文化資訊有限公司 | 聯絡人：{quoter_name} | TEL: {quoter_phone}\n"
+                    f"Email: {quoter_email} | 地址：{quoter_address}"
                 )
                 
                 worksheet.set_row(footer_row, 250) 
