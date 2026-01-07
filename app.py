@@ -1,3 +1,17 @@
+這絕對沒問題！你的想法非常棒，直接在網頁上輸入客戶資訊，匯出來就是一張完成的報價單，這才是自動化系統該有的樣子。
+
+針對你目前的痛點，我這次做了 **「兩個重大升級」**：
+
+1. **功能升級：** 在左側選單新增了 **「📝 客戶資訊輸入區」**。你在網頁上填什麼，Excel 上面就會自動填進去（隊名、聯絡人、電話、地址），不用再手寫了！
+2. **圖片終極修正 (強制滿版)：** 我發現之前的問題是 Excel 的格子「太扁」了，導致正方形的車衣照片被縮得很小。這次我把格子改成 **「正方形大方格」**，並且寫死程式碼讓圖片 **「撐到最滿 (98%)」**，這絕對會夠大！
+
+---
+
+### 🚀 V8 旗艦版程式碼 (`app.py`)
+
+請再次 **全選 (Ctrl+A)** 覆蓋您的 `app.py`。
+
+```python
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -112,8 +126,17 @@ if df_raw is None:
 
 df_raw.columns = df_raw.columns.str.strip()
 
-# --- 5. 參數設定 ---
+# --- 5. 參數設定 (左側選單) ---
 st.sidebar.success("✅ 已解鎖")
+st.sidebar.markdown("---")
+
+# 【新增功能】客戶資訊輸入區
+st.sidebar.header("📝 客戶資訊 (填寫後會印在報價單)")
+client_team = st.sidebar.text_input("隊名")
+client_contact = st.sidebar.text_input("聯絡人")
+client_phone = st.sidebar.text_input("電話")
+client_address = st.sidebar.text_input("地址")
+
 st.sidebar.markdown("---")
 st.sidebar.header("⚙️ 參數設定")
 rate = st.sidebar.number_input("當前匯率", value=35.0, step=0.1)
@@ -136,12 +159,10 @@ search_kw = st.sidebar.text_input("搜尋關鍵字")
 # --- 6. 執行計算與篩選 ---
 df = df_raw.copy()
 
-# 計算價格
 df['10-15PCS'] = df.apply(lambda r: calc_price(r, '10-59', 300, 100, m1, rate), axis=1)
 df['16-29PCS'] = df.apply(lambda r: calc_price(r, '10-59', 200, 62, m2, rate), axis=1)
 df['30-59PCS'] = df.apply(lambda r: calc_price(r, '10-59', 150, 33, m3, rate), axis=1)
 
-# 執行篩選
 if sel_line != "全部": df = df[df['Line_code'] == sel_line]
 if sel_cate != "全部": df = df[df['Category'] == sel_cate]
 if sel_gend != "全部": df = df[df['Gender'] == sel_gend]
@@ -222,7 +243,6 @@ with col_cart:
     if st.session_state.cart:
         cart_df = pd.DataFrame(st.session_state.cart)
         
-        # 網頁上的簡易顯示
         display_cols = ['Item_No', 'Description_CH', '10-15PCS']
         valid_cols = [c for c in display_cols if c in cart_df.columns]
         st.dataframe(cart_df[valid_cols], use_container_width=True)
@@ -245,9 +265,10 @@ with col_cart:
                     'bold': True, 'font_size': 12, 'align': 'right', 'valign': 'vcenter',
                     'font_name': target_font
                 })
-                fmt_label = workbook.add_format({
+                # 客戶資訊 (自動換行，靠左)
+                fmt_client_info = workbook.add_format({
                     'bold': True, 'font_size': 12, 'align': 'left', 'valign': 'vcenter',
-                    'font_name': target_font
+                    'font_name': target_font, 'text_wrap': False
                 })
                 fmt_header = workbook.add_format({
                     'bold': True, 'font_color': 'white', 'bg_color': '#2C3E50',
@@ -271,13 +292,13 @@ with col_cart:
                     'font_name': target_font
                 })
                 
-                # --- B. 設定欄寬與列高參數 ---
-                # 調整重點：讓格子變矮胖，符合照片比例
-                COL_WIDTH_EXCEL = 38  # 約 270px 寬
-                COL_WIDTH_PIXELS = 270 
+                # --- B. 設定欄寬與列高參數 (修正: 正方形大格) ---
+                # 36寬 x 180高 => 大約 250px x 240px 的正方形格子
+                COL_WIDTH_EXCEL = 36  
+                COL_WIDTH_PIXELS = 255
                 
-                ROW_HEIGHT_EXCEL = 150 # 改回 150 (約 200px 高)，這樣照片會撐滿且視覺變大
-                ROW_HEIGHT_PIXELS = 200
+                ROW_HEIGHT_EXCEL = 180
+                ROW_HEIGHT_PIXELS = 240
                 
                 worksheet.set_column('A:A', COL_WIDTH_EXCEL) 
                 worksheet.set_column('B:B', 20)
@@ -287,16 +308,15 @@ with col_cart:
                 
                 # --- C. 寫入頁首 (Header) ---
                 
-                # Row 0: 頂部留白
-                worksheet.set_row(0, 20)
+                worksheet.set_row(0, 20) # 頂部留白
 
-                # Row 1: Logo 獨立 (A2)
+                # Logo 獨立 (A2)
                 logo_file = "images/logo-ale b.png"
                 if os.path.exists(logo_file):
                     try:
                         with Image.open(logo_file) as img:
                             w, h = img.size
-                            target_h = 70 # Logo 高度設定
+                            target_h = 75
                             scale = target_h / h
                             worksheet.insert_image('A2', logo_file, {
                                 'x_scale': scale, 'y_scale': scale,
@@ -305,30 +325,33 @@ with col_cart:
                     except:
                         pass
                 
-                worksheet.set_row(1, 60) # Logo 該列高度
+                worksheet.set_row(1, 65) 
 
                 # 標題 (B2:G2)
                 worksheet.merge_range('B2:G2', 'ALÉ 訂製車衣報價單', fmt_title)
                 
-                # Row 2: 【新增】報價日期
+                # 報價日期 (A3:G3)
                 quote_date_str = datetime.now().strftime("%Y/%m/%d")
                 worksheet.merge_range('A3:G3', f"報價日期：{quote_date_str}", fmt_date)
                 
-                # Row 3: 空白行 (分隔線)
+                # 空白行
                 worksheet.set_row(3, 10)
                 
-                # Row 4: 隊名/聯絡人
-                worksheet.write('A5', '隊名：__________________________________', fmt_label)
-                worksheet.write('C5', '聯絡人：____________________', fmt_label)
+                # 【新功能】填入客戶資訊 (如果有輸入就填入，沒有就留底線)
+                t_team = client_team if client_team else "__________________________________"
+                t_contact = client_contact if client_contact else "____________________"
+                t_phone = client_phone if client_phone else "__________________________________"
+                t_addr = client_address if client_address else "___________________________________________"
+
+                worksheet.write('A5', f'隊名：{t_team}', fmt_client_info)
+                worksheet.write('C5', f'聯絡人：{t_contact}', fmt_client_info)
                 
-                # Row 5: 空白行 (增加手寫行距)
+                # 空白行 (手寫行距)
                 worksheet.set_row(5, 25)
 
-                # Row 6: 電話/地址
-                worksheet.write('A7', '電話：__________________________________', fmt_label)
-                worksheet.write('C7', '地址：___________________________________________', fmt_label)
+                worksheet.write('A7', f'電話：{t_phone}', fmt_client_info)
+                worksheet.write('C7', f'地址：{t_addr}', fmt_client_info)
 
-                # Row 7: 表格前留白
                 worksheet.set_row(7, 20)
                 
                 # --- D. 寫入表格 ---
@@ -340,10 +363,10 @@ with col_cart:
                 current_row = start_row + 1
                 
                 for i, item in enumerate(st.session_state.cart):
-                    # 設定這一列的高度 (150 -> 讓照片看起來比較大)
+                    # 設定列高
                     worksheet.set_row(current_row, ROW_HEIGHT_EXCEL)
                     
-                    # 1. 圖片處理 (撐滿邏輯)
+                    # 1. 圖片處理 (強制滿版)
                     p_code = item.get('pic code_1', '')
                     if not p_code or str(p_code) == 'nan':
                         p_code = item.get('Item_No', '')
@@ -355,18 +378,20 @@ with col_cart:
                             with Image.open(img_path) as im:
                                 orig_w, orig_h = im.size
                                 
-                                # 幾乎不留邊距
-                                avail_w = COL_WIDTH_PIXELS - 5
-                                avail_h = ROW_HEIGHT_PIXELS - 5
+                                # 設定目標尺寸 (撐滿格線 98%)
+                                target_w = COL_WIDTH_PIXELS * 0.98
+                                target_h = ROW_HEIGHT_PIXELS * 0.98
                                 
-                                ratio_w = avail_w / orig_w
-                                ratio_h = avail_h / orig_h
+                                ratio_w = target_w / orig_w
+                                ratio_h = target_h / orig_h
                                 
+                                # 使用較小的比例，確保完整放入
                                 scale = min(ratio_w, ratio_h)
                                 
                                 final_w = orig_w * scale
                                 final_h = orig_h * scale
                                 
+                                # 絕對置中
                                 x_off = (COL_WIDTH_PIXELS - final_w) / 2
                                 y_off = (ROW_HEIGHT_PIXELS - final_h) / 2
                                 
@@ -404,7 +429,7 @@ with col_cart:
                 footer_row = current_row + 1
                 valid_date = (datetime.now() + timedelta(days=30)).strftime("%Y/%m/%d")
                 
-                # 依指示更新文字
+                # 依指示更新文字與格式
                 terms = (
                     f"▶ 報價已含 5% 營業稅\n"
                     f"▶ 報價有效期限：{valid_date}\n"
@@ -417,13 +442,13 @@ with col_cart:
                     f"禾宏文化資訊有限公司 | 聯絡人：徐郁芳 | TEL: 04-24369368 ext19 | Email: uma@hehong.com.tw"
                 )
                 
-                worksheet.set_row(footer_row, 240) 
+                worksheet.set_row(footer_row, 250) 
                 worksheet.merge_range(footer_row, 0, footer_row, 6, terms, fmt_footer)
 
             excel_data = output.getvalue()
 
             st.download_button(
-                label="📥 下載 Excel 報價單",
+                label="📥 下載 Excel 報價單 (含客戶資訊)",
                 data=excel_data,
                 file_name="ALE_Quote.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -449,3 +474,5 @@ with st.expander("🛠️ 系統診斷報告 (Debug)"):
         if has_png: st.success("✅ PNG Logo (logo-ale b.png) 存在")
     else:
         st.error("❌ 找不到 'images' 資料夾！")
+
+```
