@@ -52,7 +52,6 @@ def load_data():
         if 'Item_No' in df.columns:
             df['Item_No'] = df['Item_No'].astype(str).str.strip()
         
-        # 確保讀取 code_1 和 code_2
         for col in ['pic code_1', 'pic code_2']:
             if col in df.columns:
                 df[col] = df[col].astype(str).str.strip()
@@ -106,7 +105,7 @@ def find_image_robust(filename):
             
     return None
 
-# 圖片預處理：強制大小 + 透明轉白底 (Excel 與 HTML 共用)
+# 圖片預處理：強制大小 + 透明轉白底 (Excel 專用)
 def process_image(image_path, max_width=None, max_height=None):
     try:
         with Image.open(image_path) as img:
@@ -132,10 +131,6 @@ def process_image(image_path, max_width=None, max_height=None):
     except Exception:
         return None, 0, 0
 
-# 將記憶體中的圖片轉為 Base64 字串 (給 HTML 顯示用)
-def buffer_to_b64(buffer):
-    return base64.b64encode(buffer.getvalue()).decode()
-
 # 回呼函數
 def add_to_cart_callback(item_dict):
     st.session_state.cart.append(item_dict)
@@ -154,11 +149,21 @@ df_raw.columns = df_raw.columns.str.strip()
 st.sidebar.success("✅ 已解鎖")
 st.sidebar.markdown("---")
 
-st.sidebar.header("📝 客戶資訊")
+# 客戶資訊 (客戶端)
+st.sidebar.header("📝 客戶資訊 (顯示於上方)")
 client_team = st.sidebar.text_input("隊名")
 client_contact = st.sidebar.text_input("聯絡人")
 client_phone = st.sidebar.text_input("電話")
 client_address = st.sidebar.text_input("地址")
+
+st.sidebar.markdown("---")
+
+# 【新增】報價人資訊 (公司端)
+st.sidebar.header("💁‍♂️ 報價人資訊 (顯示於頁尾)")
+# 預設值為原本的寫死內容，方便直接使用，也可隨時修改
+quoter_name = st.sidebar.text_input("報價人姓名", value="徐郁芳")
+quoter_phone = st.sidebar.text_input("報價人電話", value="04-24369368 ext19")
+quoter_email = st.sidebar.text_input("報價人 Email", value="uma@hehong.com.tw")
 
 st.sidebar.markdown("---")
 st.sidebar.header("⚙️ 參數設定")
@@ -218,7 +223,7 @@ st.divider()
 
 col_main, col_cart = st.columns([2, 1])
 
-# === 左側：搜尋結果 (修正：加入正面與背面圖片) ===
+# === 左側：搜尋結果 (含正面+背面圖) ===
 with col_main:
     st.subheader(f"📦 搜尋結果 ({len(df)} 筆)")
     
@@ -229,15 +234,12 @@ with col_main:
             gender_label = f"({row['Gender']})" if 'Gender' in row and pd.notna(row['Gender']) else ""
             with st.expander(f"➕ {row['Item_No']} {gender_label} - {row['Description_CH']}"):
                 
-                # 讀取正面和背面代碼
                 code_1 = row['pic code_1'] if 'pic code_1' in row else row['Item_No']
                 code_2 = row['pic code_2'] if 'pic code_2' in row else None
                 
-                # 尋找圖片路徑
                 path_front = find_image_robust(code_1)
                 path_back = find_image_robust(code_2)
 
-                # 顯示邏輯：如果有兩張就並排，只有一張就單獨顯示
                 if path_front and path_back:
                     c1, c2 = st.columns(2)
                     c1.image(path_front, caption="正面", use_column_width=True)
@@ -271,7 +273,7 @@ with col_cart:
         st.dataframe(cart_df[valid_cols], use_container_width=True)
 
         # -------------------------------------------
-        # 功能 1：Excel 匯出
+        # 功能：Excel 匯出
         # -------------------------------------------
         output = io.BytesIO()
         try:
@@ -367,7 +369,20 @@ with col_cart:
 
                 footer_row = current_row + 1
                 valid_date = (datetime.now() + timedelta(days=30)).strftime("%Y/%m/%d")
-                terms = (f"▶ 報價已含 5% 營業稅\n▶ 報價有效期限：{valid_date}\n▶ 提供尺寸套量，預付套量押金 NT 5,000 元，退回套量後押金會退還或是轉作訂製訂金。\n\n【匯款資訊】\n銀行：彰化銀行 (代碼 009) 北屯分行\n帳號：4028-8601-6895-00\n戶名：禾宏文化資訊有限公司\n\n--------------------------------------------------\n禾宏文化資訊有限公司 | 聯絡人：徐郁芳 | TEL: 04-24369368 ext19 | Email: uma@hehong.com.tw")
+                
+                # 【修改】頁尾動態化：使用輸入變數
+                terms = (
+                    f"▶ 報價已含 5% 營業稅\n"
+                    f"▶ 報價有效期限：{valid_date}\n"
+                    f"▶ 提供尺寸套量，預付套量押金 NT 5,000 元，退回套量後押金會退還或是轉作訂製訂金。\n\n"
+                    f"【匯款資訊】\n"
+                    f"銀行：彰化銀行 (代碼 009) 北屯分行\n"
+                    f"帳號：4028-8601-6895-00\n"
+                    f"戶名：禾宏文化資訊有限公司\n\n"
+                    f"--------------------------------------------------\n"
+                    f"禾宏文化資訊有限公司 | 聯絡人：{quoter_name} | TEL: {quoter_phone} | Email: {quoter_email}"
+                )
+                
                 worksheet.set_row(footer_row, 250) 
                 worksheet.merge_range(footer_row, 0, footer_row, 6, terms, fmt_footer)
 
@@ -377,142 +392,6 @@ with col_cart:
         except Exception as e:
             st.error(f"Excel 匯出失敗: {e}")
 
-        # -------------------------------------------
-        # 功能 2：網頁列印預覽 (Print to PDF)
-        # -------------------------------------------
-        st.divider()
-        if st.button("📄 產生 PDF / 列印專用頁面"):
-            # 準備 Logo (轉為白底+Base64)
-            logo_b64 = ""
-            if os.path.exists("images/logo-ale b.png"):
-                logo_buf, _, _ = process_image("images/logo-ale b.png", 500, 80)
-                if logo_buf:
-                    logo_b64 = buffer_to_b64(logo_buf)
-
-            date_str = datetime.now().strftime("%Y/%m/%d")
-            valid_date = (datetime.now() + timedelta(days=30)).strftime("%Y/%m/%d")
-            
-            # 建立表格列的 HTML
-            table_rows_html = ""
-            for item in st.session_state.cart:
-                # 處理圖片: 轉白底 -> 轉 Base64
-                p_code = item.get('pic code_1', '')
-                if not p_code or str(p_code) == 'nan': p_code = item.get('Item_No', '')
-                img_path = find_image_robust(p_code)
-                
-                img_html = ""
-                if img_path:
-                    # 強制轉為白底圖片，確保列印時無灰底
-                    img_buf, _, _ = process_image(img_path, 300, 300)
-                    if img_buf:
-                        img_b64 = buffer_to_b64(img_buf)
-                        img_html = f'<img src="data:image/png;base64,{img_b64}" class="product-img">'
-                
-                # 處理價格
-                def fmt_p(val):
-                    try: return f"${float(val):,.0f}"
-                    except: return "$0"
-
-                table_rows_html += f"""
-                    <tr>
-                        <td>{img_html}</td>
-                        <td>{item.get('Item_No', '')}</td>
-                        <td style="text-align: left;">{item.get('Description_CH', '')}</td>
-                        <td>{fmt_p(item.get('10-15PCS'))}</td>
-                        <td>{fmt_p(item.get('16-29PCS'))}</td>
-                        <td>{fmt_p(item.get('30-59PCS'))}</td>
-                        <td>{item.get('NOTE', '') if pd.notna(item.get('NOTE')) else ''}</td>
-                    </tr>
-                """
-
-            html_content = f"""
-<!DOCTYPE html>
-<html>
-<head>
-<style>
-    body {{ font-family: 'Noto Sans TC', 'Microsoft JhengHei', sans-serif; padding: 40px; color: #000; }}
-    .header-table {{ width: 100%; margin-bottom: 20px; }}
-    .logo {{ height: 80px; }}
-    .title {{ font-size: 28px; font-weight: bold; text-align: center; }}
-    .date {{ text-align: right; font-weight: bold; font-size: 14px; vertical-align: bottom; }}
-    .info-table {{ width: 100%; margin-bottom: 20px; font-size: 16px; border-collapse: collapse; }}
-    .info-table td {{ padding: 5px 0; }}
-    .info-label {{ font-weight: bold; width: 80px; vertical-align: top; }}
-    .info-val {{ border-bottom: 1px solid #ccc; padding-right: 20px; }}
-    .quote-table {{ width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 20px; }}
-    .quote-table th {{ background-color: #2C3E50; color: white; padding: 10px; border: 1px solid #000; text-align: center; }}
-    .quote-table td {{ border: 1px solid #000; padding: 10px; text-align: center; vertical-align: middle; }}
-    .product-img {{ width: 150px; height: auto; display: block; margin: 0 auto; }}
-    .footer {{ margin-top: 30px; font-size: 12px; line-height: 1.6; white-space: pre-line; }}
-    
-    @media print {{ 
-        .no-print {{ display: none; }} 
-        body {{ -webkit-print-color-adjust: exact; padding: 0; }}
-        .quote-table th {{ background-color: #2C3E50 !important; color: white !important; }}
-    }}
-</style>
-</head>
-<body>
-    <div class="no-print" style="margin-bottom: 20px; padding: 15px; background: #fff3cd; border: 1px solid #ffeeba; border-radius: 5px; text-align: center;">
-        ⚠️ <b>列印說明：</b> 請按 <b>Ctrl + P</b> (Mac: Cmd + P) 開啟列印視窗，目的地選擇 <b>「另存為 PDF」</b>。
-        <br>若沒看到背景色，請在列印設定中勾選 <b>「背景圖形」</b>。
-    </div>
-    
-    <table class="header-table">
-        <tr>
-            <td width="20%"><img src="data:image/png;base64,{logo_b64}" class="logo"></td>
-            <td class="title">ALÉ 訂製車衣報價單</td>
-            <td width="20%" class="date">報價日期：{date_str}</td>
-        </tr>
-    </table>
-
-    <table class="info-table">
-        <tr>
-            <td class="info-label">隊名：</td><td class="info-val">{client_team}</td>
-            <td width="20"></td>
-            <td class="info-label">聯絡人：</td><td class="info-val">{client_contact}</td>
-        </tr>
-        <tr><td colspan="5" style="height: 10px;"></td></tr>
-        <tr>
-            <td class="info-label">電話：</td><td class="info-val">{client_phone}</td>
-            <td></td>
-            <td class="info-label">地址：</td><td class="info-val">{client_address}</td>
-        </tr>
-    </table>
-
-    <table class="quote-table">
-        <thead>
-            <tr>
-                <th width="20%">產品圖片</th>
-                <th width="15%">型號</th>
-                <th width="25%">中文品名</th>
-                <th width="10%">10-15PCS</th>
-                <th width="10%">16-29PCS</th>
-                <th width="10%">30-59PCS</th>
-                <th width="10%">備註</th>
-            </tr>
-        </thead>
-        <tbody>
-            {table_rows_html}
-        </tbody>
-    </table>
-
-    <div class="footer">▶ 報價已含 5% 營業稅
-▶ 報價有效期限：{valid_date}
-▶ 提供尺寸套量，預付套量押金 NT 5,000 元，退回套量後押金會退還或是轉作訂製訂金。
-
-<b>【匯款資訊】</b>
-銀行：彰化銀行 (代碼 009) 北屯分行
-帳號：4028-8601-6895-00
-戶名：禾宏文化資訊有限公司
-
---------------------------------------------------
-禾宏文化資訊有限公司 | 聯絡人：徐郁芳 | TEL: 04-24369368 ext19 | Email: uma@hehong.com.tw</div>
-</body>
-</html>
-"""
-            st.markdown(html_content, unsafe_allow_html=True)
-
         st.divider()
         if st.button("🗑️ 清空全部"):
             st.session_state.cart = []
@@ -520,9 +399,14 @@ with col_cart:
     else:
         st.info("尚未選取任何產品")
 
+# ==========================================
+# 🛑 系統診斷區
+# ==========================================
 st.divider()
-with st.expander("🛠️ 系統診斷報告"):
+with st.expander("🛠️ 系統診斷報告 (Debug)"):
     if os.path.exists("images"):
         st.success("✅ 'images' 資料夾存在")
+        has_png = os.path.exists("images/logo-ale b.png")
+        if has_png: st.success("✅ PNG Logo (logo-ale b.png) 存在")
     else:
         st.error("❌ 找不到 'images' 資料夾！")
