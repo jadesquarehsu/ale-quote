@@ -105,18 +105,11 @@ def find_image_robust(filename):
             
     return None
 
-# 圖片轉 Base64 (給 HTML 用)
-def img_to_b64(path):
-    try:
-        with open(path, "rb") as img_file:
-            return base64.b64encode(img_file.read()).decode()
-    except:
-        return ""
-
-# Excel 圖片預處理 (白底 + 強制尺寸)
-def process_image_for_excel(image_path, max_width, max_height):
+# 圖片預處理：強制大小 + 透明轉白底 (Excel 與 HTML 共用)
+def process_image(image_path, max_width=None, max_height=None):
     try:
         with Image.open(image_path) as img:
+            # 1. 處理透明背景 -> 轉為白底
             if img.mode in ('RGBA', 'LA') or (img.mode == 'P' and 'transparency' in img.info):
                 img = img.convert('RGBA')
                 background = Image.new('RGB', img.size, (255, 255, 255))
@@ -125,13 +118,22 @@ def process_image_for_excel(image_path, max_width, max_height):
             elif img.mode != 'RGB':
                 img = img.convert('RGB')
             
-            img.thumbnail((max_width, max_height), Image.Resampling.LANCZOS)
+            # 2. 如果有指定大小，進行縮放
+            if max_width and max_height:
+                img.thumbnail((max_width, max_height), Image.Resampling.LANCZOS)
+            
+            # 3. 存入記憶體
             output = io.BytesIO()
             img.save(output, format='PNG')
             output.seek(0)
+            
             return output, img.width, img.height
     except Exception:
         return None, 0, 0
+
+# 將記憶體中的圖片轉為 Base64 字串 (給 HTML 顯示用)
+def buffer_to_b64(buffer):
+    return base64.b64encode(buffer.getvalue()).decode()
 
 # 回呼函數
 def add_to_cart_callback(item_dict):
@@ -256,7 +258,7 @@ with col_cart:
         st.dataframe(cart_df[valid_cols], use_container_width=True)
 
         # -------------------------------------------
-        # 功能 1：Excel 匯出 (您的完美版本 V21)
+        # 功能 1：Excel 匯出
         # -------------------------------------------
         output = io.BytesIO()
         try:
@@ -266,7 +268,6 @@ with col_cart:
                 worksheet.hide_gridlines(2)
                 target_font = 'Noto Sans CJK TC' 
                 
-                # ... (格式定義同 V21) ...
                 fmt_title = workbook.add_format({'bold': True, 'font_size': 28, 'align': 'center', 'valign': 'vcenter', 'font_name': target_font})
                 fmt_date = workbook.add_format({'bold': True, 'font_size': 12, 'align': 'right', 'valign': 'vcenter', 'font_name': target_font})
                 fmt_client_label = workbook.add_format({'bold': True, 'font_size': 16, 'align': 'left', 'valign': 'vcenter', 'font_name': target_font})
@@ -287,14 +288,13 @@ with col_cart:
                 worksheet.set_column('D:F', 15)
                 worksheet.set_column('G:G', 20)
                 
-                # Header Logic (同 V21)
                 worksheet.set_row(0, 20) 
                 header_row_height = 100
                 worksheet.set_row(1, header_row_height) 
                 logo_file = "images/logo-ale b.png"
                 if os.path.exists(logo_file):
                     logo_target_h = 80
-                    logo_img_buffer, w, h = process_image_for_excel(logo_file, 500, logo_target_h)
+                    logo_img_buffer, w, h = process_image(logo_file, 500, logo_target_h)
                     if logo_img_buffer:
                         y_offset = (133 - h) / 2 
                         worksheet.insert_image('A2', logo_file, {'image_data': logo_img_buffer, 'x_offset': 10, 'y_offset': y_offset})
@@ -330,7 +330,8 @@ with col_cart:
                     if not p_code or str(p_code) == 'nan': p_code = item.get('Item_No', '')
                     img_path = find_image_robust(p_code)
                     if img_path:
-                        img_buffer, final_w, final_h = process_image_for_excel(img_path, 180, 180) # 強制尺寸
+                        # 強制圖片 180x180 並去背轉白底
+                        img_buffer, final_w, final_h = process_image(img_path, 180, 180)
                         if img_buffer:
                             x_off = (CELL_W_PX - final_w) / 2
                             y_off = (CELL_H_PX - final_h) / 2
@@ -358,103 +359,49 @@ with col_cart:
                 worksheet.merge_range(footer_row, 0, footer_row, 6, terms, fmt_footer)
 
             excel_data = output.getvalue()
-            st.download_button(label="📥 下載 Excel 報價單 (最完美版)", data=excel_data, file_name="ALE_Quote.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            st.download_button(label="📥 下載 Excel 報價單", data=excel_data, file_name="ALE_Quote.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         
         except Exception as e:
             st.error(f"Excel 匯出失敗: {e}")
 
         # -------------------------------------------
-        # 功能 2：【新增】網頁列印預覽 (Print to PDF)
+        # 功能 2：網頁列印預覽 (Print to PDF)
         # -------------------------------------------
         st.divider()
         if st.button("📄 產生 PDF / 列印專用頁面"):
-            # 準備 Logo Base64
-            logo_b64 = img_to_b64("images/logo-ale b.png")
+            # 準備 Logo (轉為白底+Base64)
+            logo_b64 = ""
+            if os.path.exists("images/logo-ale b.png"):
+                # 使用 process_image 確保 Logo 也是白底且高品質
+                logo_buf, _, _ = process_image("images/logo-ale b.png", 500, 80)
+                if logo_buf:
+                    logo_b64 = buffer_to_b64(logo_buf)
+
             date_str = datetime.now().strftime("%Y/%m/%d")
             valid_date = (datetime.now() + timedelta(days=30)).strftime("%Y/%m/%d")
             
-            # 產生 HTML 字串
-            html_content = f"""
-            <html>
-            <head>
-                <style>
-                    body {{ font-family: 'Noto Sans TC', sans-serif; padding: 20px; }}
-                    .header-table {{ width: 100%; margin-bottom: 20px; }}
-                    .logo {{ height: 80px; }}
-                    .title {{ font-size: 28px; font-weight: bold; text-align: center; }}
-                    .date {{ text-align: right; font-weight: bold; font-size: 14px; }}
-                    .info-table {{ width: 100%; margin-bottom: 20px; font-size: 16px; }}
-                    .info-label {{ font-weight: bold; width: 80px; }}
-                    .quote-table {{ width: 100%; border-collapse: collapse; font-size: 12px; }}
-                    .quote-table th {{ background-color: #2C3E50; color: white; padding: 10px; border: 1px solid black; }}
-                    .quote-table td {{ border: 1px solid black; padding: 10px; text-align: center; vertical-align: middle; }}
-                    .product-img {{ width: 150px; height: auto; display: block; margin: 0 auto; }}
-                    .footer {{ margin-top: 20px; font-size: 12px; white-space: pre-line; }}
-                    @media print {{ 
-                        .no-print {{ display: none; }} 
-                        body {{ -webkit-print-color-adjust: exact; }}
-                    }}
-                </style>
-            </head>
-            <body>
-                <div class="no-print" style="margin-bottom: 20px; padding: 10px; background: #fff3cd; border: 1px solid #ffeeba;">
-                    ⚠️ 請按 <b>Ctrl + P</b> (Mac: Cmd + P) 開啟列印，選擇 <b>「另存為 PDF」</b>。
-                </div>
-                
-                <table class="header-table">
-                    <tr>
-                        <td width="20%"><img src="data:image/png;base64,{logo_b64}" class="logo"></td>
-                        <td class="title">ALÉ 訂製車衣報價單</td>
-                    </tr>
-                    <tr>
-                        <td></td>
-                        <td class="date">報價日期：{date_str}</td>
-                    </tr>
-                </table>
-
-                <table class="info-table">
-                    <tr>
-                        <td class="info-label">隊名：</td><td>{client_team}</td>
-                        <td class="info-label">聯絡人：</td><td>{client_contact}</td>
-                    </tr>
-                    <tr><td style="height: 10px;"></td></tr>
-                    <tr>
-                        <td class="info-label">電話：</td><td>{client_phone}</td>
-                        <td class="info-label">地址：</td><td>{client_address}</td>
-                    </tr>
-                </table>
-
-                <table class="quote-table">
-                    <thead>
-                        <tr>
-                            <th width="20%">產品圖片</th>
-                            <th width="15%">型號</th>
-                            <th width="25%">中文品名</th>
-                            <th width="10%">10-15PCS</th>
-                            <th width="10%">16-29PCS</th>
-                            <th width="10%">30-59PCS</th>
-                            <th width="10%">備註</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            """
-            
+            # 建立表格列的 HTML
+            table_rows_html = ""
             for item in st.session_state.cart:
-                # 處理圖片 Base64
+                # 處理圖片: 轉白底 -> 轉 Base64
                 p_code = item.get('pic code_1', '')
                 if not p_code or str(p_code) == 'nan': p_code = item.get('Item_No', '')
                 img_path = find_image_robust(p_code)
+                
                 img_html = ""
                 if img_path:
-                    img_b64 = img_to_b64(img_path)
-                    img_html = f'<img src="data:image/png;base64,{img_b64}" class="product-img">'
+                    # 強制轉為白底圖片，確保列印時無灰底
+                    img_buf, _, _ = process_image(img_path, 300, 300)
+                    if img_buf:
+                        img_b64 = buffer_to_b64(img_buf)
+                        img_html = f'<img src="data:image/png;base64,{img_b64}" class="product-img">'
                 
                 # 處理價格
                 def fmt_p(val):
                     try: return f"${float(val):,.0f}"
                     except: return "$0"
 
-                html_content += f"""
+                table_rows_html += f"""
                     <tr>
                         <td>{img_html}</td>
                         <td>{item.get('Item_No', '')}</td>
@@ -466,28 +413,94 @@ with col_cart:
                     </tr>
                 """
 
-            html_content += f"""
-                    </tbody>
-                </table>
+            # 組合完整 HTML (移除縮排以避免 st.markdown 誤判)
+            html_content = f"""
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+    body {{ font-family: 'Noto Sans TC', 'Microsoft JhengHei', sans-serif; padding: 40px; color: #000; }}
+    .header-table {{ width: 100%; margin-bottom: 20px; }}
+    .logo {{ height: 80px; }}
+    .title {{ font-size: 28px; font-weight: bold; text-align: center; }}
+    .date {{ text-align: right; font-weight: bold; font-size: 14px; vertical-align: bottom; }}
+    .info-table {{ width: 100%; margin-bottom: 20px; font-size: 16px; border-collapse: collapse; }}
+    .info-table td {{ padding: 5px 0; }}
+    .info-label {{ font-weight: bold; width: 80px; vertical-align: top; }}
+    .info-val {{ border-bottom: 1px solid #ccc; padding-right: 20px; }}
+    .quote-table {{ width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 20px; }}
+    .quote-table th {{ background-color: #2C3E50; color: white; padding: 10px; border: 1px solid #000; text-align: center; }}
+    .quote-table td {{ border: 1px solid #000; padding: 10px; text-align: center; vertical-align: middle; }}
+    .product-img {{ width: 150px; height: auto; display: block; margin: 0 auto; }}
+    .footer {{ margin-top: 30px; font-size: 12px; line-height: 1.6; white-space: pre-line; }}
+    
+    @media print {{ 
+        .no-print {{ display: none; }} 
+        body {{ -webkit-print-color-adjust: exact; padding: 0; }}
+        .quote-table th {{ background-color: #2C3E50 !important; color: white !important; }}
+    }}
+</style>
+</head>
+<body>
+    <div class="no-print" style="margin-bottom: 20px; padding: 15px; background: #fff3cd; border: 1px solid #ffeeba; border-radius: 5px; text-align: center;">
+        ⚠️ <b>列印說明：</b> 請按 <b>Ctrl + P</b> (Mac: Cmd + P) 開啟列印視窗，目的地選擇 <b>「另存為 PDF」</b>。
+        <br>若沒看到背景色，請在列印設定中勾選 <b>「背景圖形」</b>。
+    </div>
+    
+    <table class="header-table">
+        <tr>
+            <td width="20%"><img src="data:image/png;base64,{logo_b64}" class="logo"></td>
+            <td class="title">ALÉ 訂製車衣報價單</td>
+            <td width="20%" class="date">報價日期：{date_str}</td>
+        </tr>
+    </table>
 
-                <div class="footer">
-                    ▶ 報價已含 5% 營業稅
-                    ▶ 報價有效期限：{valid_date}
-                    ▶ 提供尺寸套量，預付套量押金 NT 5,000 元，退回套量後押金會退還或是轉作訂製訂金。
+    <table class="info-table">
+        <tr>
+            <td class="info-label">隊名：</td><td class="info-val">{client_team}</td>
+            <td width="20"></td>
+            <td class="info-label">聯絡人：</td><td class="info-val">{client_contact}</td>
+        </tr>
+        <tr><td colspan="5" style="height: 10px;"></td></tr>
+        <tr>
+            <td class="info-label">電話：</td><td class="info-val">{client_phone}</td>
+            <td></td>
+            <td class="info-label">地址：</td><td class="info-val">{client_address}</td>
+        </tr>
+    </table>
 
-                    <b>【匯款資訊】</b>
-                    銀行：彰化銀行 (代碼 009) 北屯分行
-                    帳號：4028-8601-6895-00
-                    戶名：禾宏文化資訊有限公司
+    <table class="quote-table">
+        <thead>
+            <tr>
+                <th width="20%">產品圖片</th>
+                <th width="15%">型號</th>
+                <th width="25%">中文品名</th>
+                <th width="10%">10-15PCS</th>
+                <th width="10%">16-29PCS</th>
+                <th width="10%">30-59PCS</th>
+                <th width="10%">備註</th>
+            </tr>
+        </thead>
+        <tbody>
+            {table_rows_html}
+        </tbody>
+    </table>
 
-                    --------------------------------------------------
-                    禾宏文化資訊有限公司 | 聯絡人：徐郁芳 | TEL: 04-24369368 ext19 | Email: uma@hehong.com.tw
-                </div>
-            </body>
-            </html>
-            """
+    <div class="footer">▶ 報價已含 5% 營業稅
+▶ 報價有效期限：{valid_date}
+▶ 提供尺寸套量，預付套量押金 NT 5,000 元，退回套量後押金會退還或是轉作訂製訂金。
+
+<b>【匯款資訊】</b>
+銀行：彰化銀行 (代碼 009) 北屯分行
+帳號：4028-8601-6895-00
+戶名：禾宏文化資訊有限公司
+
+--------------------------------------------------
+禾宏文化資訊有限公司 | 聯絡人：徐郁芳 | TEL: 04-24369368 ext19 | Email: uma@hehong.com.tw</div>
+</body>
+</html>
+"""
             
-            # 顯示 HTML 預覽
             st.markdown(html_content, unsafe_allow_html=True)
 
         st.divider()
