@@ -18,9 +18,16 @@ st.set_page_config(
 )
 
 # ==========================================
-# 🔐 安全密碼鎖
+# 🔐 安全密碼鎖 & 機密資料讀取 (資安防護版)
 # ==========================================
-PASSWORD = "8017"
+try:
+    # 嘗試從 Streamlit Secrets (雲端) 或 secrets.toml (本機) 讀取
+    # 這樣原始碼裡就不會有密碼了！
+    PASSWORD = st.secrets["APP_PASSWORD"]
+    SHEET_ID = st.secrets["SHEET_ID"]
+except FileNotFoundError:
+    st.error("❌ 尚未設定機密資訊！請確認 .streamlit/secrets.toml 是否存在 (本機)，或至 Streamlit Cloud 設定 Secrets (雲端)。")
+    st.stop()
 
 input_pass = st.sidebar.text_input("🔒 請輸入通關密碼", type="password")
 
@@ -35,7 +42,6 @@ if input_pass != PASSWORD:
 # ==========================================
 
 # --- 2. Google Sheet 設定 ---
-SHEET_ID = "1LNaFoDOAr08LGxQ8cCRSSff7U7OU5ABH" 
 SHEET_NAME = "Sheet1" 
 
 try:
@@ -163,7 +169,6 @@ st.sidebar.header("💁‍♂️ 報價人資訊 (顯示於頁尾)")
 quoter_name = st.sidebar.text_input("報價人姓名", value="徐郁芳")
 quoter_phone = st.sidebar.text_input("報價人電話", value="04-24369368 ext19")
 quoter_email = st.sidebar.text_input("報價人 Email", value="uma@hehong.com.tw")
-# 【新增】公司地址欄位
 quoter_address = st.sidebar.text_input("公司地址", value="台中市北屯區松竹五路二段426號")
 
 st.sidebar.markdown("---")
@@ -371,7 +376,6 @@ with col_cart:
                 footer_row = current_row + 1
                 valid_date = (datetime.now() + timedelta(days=30)).strftime("%Y/%m/%d")
                 
-                # 【修改】頁尾動態化：加入公司地址，並分行排版
                 terms = (
                     f"▶ 報價已含 5% 營業稅\n"
                     f"▶ 報價有效期限：{valid_date}\n"
