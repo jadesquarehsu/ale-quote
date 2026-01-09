@@ -7,6 +7,7 @@ import io
 import base64
 from PIL import Image
 from datetime import datetime, timedelta
+import yfinance as yf  # ✨ 新增：引入財經套件抓取匯率
 
 # --- 1. 網頁基本設定 ---
 favicon = "images/hh.svg" if os.path.exists("images/hh.svg") else "🚴"
@@ -21,8 +22,6 @@ st.set_page_config(
 # 🔐 安全密碼鎖 & 機密資料讀取 (資安防護版)
 # ==========================================
 try:
-    # 嘗試從 Streamlit Secrets (雲端) 或 secrets.toml (本機) 讀取
-    # 這樣原始碼裡就不會有密碼了！
     PASSWORD = st.secrets["APP_PASSWORD"]
     SHEET_ID = st.secrets["SHEET_ID"]
 except FileNotFoundError:
@@ -68,6 +67,21 @@ def load_data():
     except:
         return None
 
+# --- ✨ 新增功能：抓取即時歐元匯率 ---
+@st.cache_data(ttl=3600) # 設定快取 1 小時，避免頻繁抓取
+def get_live_eur_rate():
+    try:
+        # 抓取歐元兌台幣 (EURTWD=X)
+        ticker = yf.Ticker("EURTWD=X")
+        # 取得最後一筆收盤價
+        data = ticker.history(period="1d")
+        if not data.empty:
+            rate = data['Close'].iloc[-1]
+            return round(rate, 2) # 四捨五入到小數點第二位
+        return 35.0 # 如果抓不到資料，回傳預設值
+    except Exception:
+        return 35.0 # 發生錯誤時，回傳預設值
+
 # --- 4. 計算邏輯 ---
 FREIGHT_MAP = {'A': 45, 'B': 63, 'C': 103, 'D': 13, 'E': 22}
 
@@ -111,11 +125,10 @@ def find_image_robust(filename):
             
     return None
 
-# 圖片預處理：強制大小 + 透明轉白底 (Excel 專用)
+# 圖片預處理
 def process_image(image_path, max_width=None, max_height=None):
     try:
         with Image.open(image_path) as img:
-            # 1. 處理透明背景 -> 轉為白底
             if img.mode in ('RGBA', 'LA') or (img.mode == 'P' and 'transparency' in img.info):
                 img = img.convert('RGBA')
                 background = Image.new('RGB', img.size, (255, 255, 255))
@@ -124,11 +137,9 @@ def process_image(image_path, max_width=None, max_height=None):
             elif img.mode != 'RGB':
                 img = img.convert('RGB')
             
-            # 2. 如果有指定大小，進行縮放
             if max_width and max_height:
                 img.thumbnail((max_width, max_height), Image.Resampling.LANCZOS)
             
-            # 3. 存入記憶體
             output = io.BytesIO()
             img.save(output, format='PNG')
             output.seek(0)
@@ -137,7 +148,6 @@ def process_image(image_path, max_width=None, max_height=None):
     except Exception:
         return None, 0, 0
 
-# 回呼函數
 def add_to_cart_callback(item_dict):
     st.session_state.cart.append(item_dict)
     st.toast(f"✅ 已加入 {item_dict.get('Item_No', '產品')}")
@@ -155,7 +165,7 @@ df_raw.columns = df_raw.columns.str.strip()
 st.sidebar.success("✅ 已解鎖")
 st.sidebar.markdown("---")
 
-# 客戶資訊 (客戶端)
+# 客戶資訊
 st.sidebar.header("📝 客戶資訊 (顯示於上方)")
 client_team = st.sidebar.text_input("隊名")
 client_contact = st.sidebar.text_input("聯絡人")
@@ -164,7 +174,7 @@ client_address = st.sidebar.text_input("地址")
 
 st.sidebar.markdown("---")
 
-# 報價人資訊 (公司端)
+# 報價人資訊
 st.sidebar.header("💁‍♂️ 報價人資訊 (顯示於頁尾)")
 quoter_name = st.sidebar.text_input("報價人姓名", value="徐郁芳")
 quoter_phone = st.sidebar.text_input("報價人電話", value="04-24369368 ext19")
@@ -173,7 +183,10 @@ quoter_address = st.sidebar.text_input("公司地址", value="台中市北屯區
 
 st.sidebar.markdown("---")
 st.sidebar.header("⚙️ 參數設定")
-rate = st.sidebar.number_input("當前匯率", value=35.0, step=0.1)
+
+# ✨ 修改功能：取得即時匯率並設為預設值
+live_rate_val = get_live_eur_rate()
+rate = st.sidebar.number_input(f"當前匯率 (即時: {live_rate_val})", value=live_rate_val, step=0.1)
 
 with st.sidebar.expander("📈 進階利潤率設定 (點擊展開)"):
     m1 = st.slider("10-15pcs (%)", 10, 60, 40) / 100
@@ -351,7 +364,6 @@ with col_cart:
                     if not p_code or str(p_code) == 'nan': p_code = item.get('Item_No', '')
                     img_path = find_image_robust(p_code)
                     if img_path:
-                        # 強制圖片 180x180 並去背轉白底
                         img_buffer, final_w, final_h = process_image(img_path, 180, 180)
                         if img_buffer:
                             x_off = (CELL_W_PX - final_w) / 2
@@ -376,8 +388,10 @@ with col_cart:
                 footer_row = current_row + 1
                 valid_date = (datetime.now() + timedelta(days=30)).strftime("%Y/%m/%d")
                 
+                # ✨ 修改功能：加入匯率說明到 Excel 頁尾
                 terms = (
                     f"▶ 報價已含 5% 營業稅\n"
+                    f"▶ 本報價基準匯率為歐元 {rate} 元\n"  # 👈 這裡新增了匯率說明
                     f"▶ 報價有效期限：{valid_date}\n"
                     f"▶ 提供尺寸套量，預付套量押金 NT 5,000 元，退回套量後押金會退還或是轉作訂製訂金。\n\n"
                     f"【匯款資訊】\n"
